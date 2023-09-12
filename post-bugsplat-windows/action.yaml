@@ -1,0 +1,57 @@
+name: post-bugsplat-windows
+description:
+  Post a Linden Windows viewer and corresponding .pdb to BugSplat using symbol-upload.
+
+inputs:
+  username:
+    description: "BugSplat account username"
+    type: string
+    required: true
+  password:
+    description: "BugSplat account password"
+    type: string
+    required: true
+  database:
+    description: "BugSplat crash database"
+    type: string
+    required: true
+  channel:
+    description: "Viewer channel"
+    type: string
+    required: true
+  version:
+    description: "Viewer version"
+    type: string
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Download viewer exe
+      uses: actions/download-artifact@v3
+      with:
+        name: Windows-app
+        path: _artifacts
+
+    - name: Download viewer symbols
+      uses: actions/download-artifact@v3
+      with:
+        name: Windows-symbols
+        path: _artifacts
+
+    - name: Extract viewer pdb
+      shell: bash
+      run: |
+        cd _artifacts
+        tar -xjf secondlife-symbols-windows-64.tar.bz2
+
+    - name: Post to BugSplat
+      uses: secondlife-3p/symbol-upload@reusable-action
+      with:
+        username: "${{ inputs.username }}"
+        password: "${{ inputs.password }}"
+        database: "${{ inputs.database }}"
+        application: "${{ inputs.channel }}"
+        version: "${{ inputs.version }}"
+        files: "{*/SecondLifeViewer.exe,secondlife-bin.pdb}"
+        directory: _artifacts

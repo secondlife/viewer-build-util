@@ -1,0 +1,45 @@
+name: viewer-post-bugsplat-mac
+description:
+  Post Linden Mac viewer symbols to BugSplat using symbol-upload.
+
+inputs:
+  username:
+    description: "BugSplat account username"
+    type: string
+    required: true
+  password:
+    description: "BugSplat account password"
+    type: string
+    required: true
+  database:
+    description: "BugSplat crash database"
+    type: string
+    required: true
+  channel:
+    description: "Viewer channel"
+    type: string
+    required: true
+  version:
+    description: "Viewer version"
+    type: string
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Download viewer symbols
+      uses: actions/download-artifact@v3
+      with:
+        name: macOS-symbols
+        path: _artifacts
+
+    - name: Post to BugSplat
+      uses: secondlife-3p/symbol-upload@reusable-action
+      with:
+        username: "${{ inputs.username }}"
+        password: "${{ inputs.password }}"
+        database: "${{ inputs.database }}"
+        application: "${{ inputs.channel }}"
+        version: "${{ inputs.version }}"
+        files: "${{ inputs.channel }}.xcarchive.zip"
+        directory: _artifacts
