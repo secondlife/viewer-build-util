@@ -53,5 +53,5 @@ runs:
         database: "${{ inputs.database }}"
         application: "${{ inputs.channel }}"
         version: "${{ inputs.version }}"
-        files: "{*/SecondLifeViewer.exe,secondlife-bin.pdb}"
+        files: "{SecondLifeViewer.exe,secondlife-bin.pdb}"
         directory: _artifacts
