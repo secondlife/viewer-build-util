@@ -20,3 +20,52 @@ runs:
       with:
         name: Windows-app
         path: .app
+
+    - name: Sign the executables
+      shell: bash
+      run: |
+        for exe in .app/SecondLifeViewer.exe \
+                   .app/SLVersionChecker.exe \
+                   .app/llplugin/dullahan_host.exe
+        do
+            # TODO - ls for now to verify that we're looking in the right places
+            ls -l "$exe"
+        done
+
+    - name: Build the installer
+      shell: bash
+      run: |
+        # Logic derived from viewer_manifest.py - still needed though?
+        nsis_path="makensis.exe"
+        for program_files in "${programfiles}" "${programfiles(x86)}"
+        do
+            for subpath in NSIS NSIS/Unicode
+            do
+                possible_path="$program_files/$subpath/$nsis_path"
+                if [[ -f "$possible_path" ]]
+                then
+                    nsis_path="$possible_path"
+                    break
+                fi
+            done
+        done
+
+        # This .nsi file was prepared by viewer_manifest.py (by substituting
+        # values into a template .nsi file) and bundled into the top level of
+        # the Windows-app artifact.
+        "$nsis_path" /V2 '.app\secondlife_setup_tmp.nsi'
+
+    - name: Sign the installer
+      shell: bash
+      run: |
+        installer="$(ls -t *_Setup.exe | head -n 1)"
+        # TODO - ls for now to verify that we're looking in the right place
+        ls -l "$installer"
+        # pass installer to next step
+        echo "installer=$installer" >> "$GITHUB_ENV"
+
+    - name: Post the installer
+      uses: actions/upload-artifact@v3
+      with:
+        name: "Windows-installer"
+        path: ${{ env.installer }}
