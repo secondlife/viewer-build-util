@@ -33,27 +33,35 @@ runs:
         done
 
     - name: Build the installer
-      shell: bash
+      shell: python
       run: |
         # Logic derived from viewer_manifest.py - still needed though?
-        nsis_path="makensis.exe"
-        for program_files in "${programfiles}" "${programfiles(x86)}"
-        do
-            for subpath in NSIS NSIS/Unicode
-            do
-                possible_path="$program_files/$subpath/$nsis_path"
-                if [[ -f "$possible_path" ]]
-                then
-                    nsis_path="$possible_path"
-                    break
-                fi
-            done
-        done
+        # Use Python because bash refuses to expand "${programfiles(x86)}" --
+        # even though that's really the name of the Windows environment
+        # variable.
+        import os
+        import shlex
+        import subprocess
+        nsis_path = "makensis.exe"
+        try:
+            for program_files in os.getenv('programfiles'), os.getenv('programfiles(x86)'):
+                if program_files:
+                    for subpath in 'NSIS', r'NSIS\Unicode':
+                        possible_path = os.path.join(program_files, subpath, nsis_path)
+                        if os.path.isfile(possible_path):
+                            nsis_path = possible_path
+                            # don't just break: we need to exit multiple
+                            # levels of 'for' loop
+                            raise StopIteration()
+        except StopIteration:
+            pass
 
         # This .nsi file was prepared by viewer_manifest.py (by substituting
         # values into a template .nsi file) and bundled into the top level of
         # the Windows-app artifact.
-        "$nsis_path" /V2 '.app\secondlife_setup_tmp.nsi'
+        command = [nsis_path, '/V2', r'.app\secondlife_setup_tmp.nsi']
+        print(shlex.join(command))
+        subprocess.check_call(command)
 
     - name: Sign the installer
       shell: bash
