@@ -33,6 +33,7 @@ runs:
         done
 
     - name: Build the installer
+      id: nsis
       shell: python
       run: |
         # Logic derived from viewer_manifest.py - still needed though?
@@ -59,9 +60,14 @@ runs:
         # This .nsi file was prepared by viewer_manifest.py (by substituting
         # values into a template .nsi file) and bundled into the top level of
         # the Windows-app artifact.
-        command = [nsis_path, '/V2', r'.app\secondlife_setup_tmp.nsi']
+        command = [nsis_path, '/V2', 'secondlife_setup_tmp.nsi']
         print(shlex.join(command))
-        subprocess.check_call(command)
+        subprocess.check_call(command, cwd='.app')
+
+    - name: Dump NSIS input file
+      if: ${{ failure() && steps.nsis.conclusion == 'failure' }}
+      shell: bash
+      run: cat '.app/secondlife_setup_tmp.nsi'
 
     - name: Sign the installer
       shell: bash
