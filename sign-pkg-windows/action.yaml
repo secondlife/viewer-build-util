@@ -21,16 +21,20 @@ runs:
         name: Windows-app
         path: .app
 
-    - name: Sign the executables
-      shell: bash
-      run: |
-        for exe in .app/SecondLifeViewer.exe \
-                   .app/SLVersionChecker.exe \
-                   .app/llplugin/dullahan_host.exe
-        do
-            # TODO - ls for now to verify that we're looking in the right places
-            ls -l "$exe"
-        done
+    - name: Sign the viewer
+      uses: ${{ github.action_path }}/sign
+      with:
+        executable: .app/SecondLifeViewer.exe
+
+    - name: Sign the updater
+      uses: ${{ github.action_path }}/sign
+      with:
+        executable: .app/SLVersionChecker.exe
+
+    - name: Sign dullahan_host
+      uses: ${{ github.action_path }}/sign
+      with:
+        executable: .app/llplugin/dullahan_host.exe
 
     - name: Build the installer
       id: nsis
@@ -69,15 +73,17 @@ runs:
       shell: bash
       run: cat '.app/secondlife_setup_tmp.nsi'
 
-    - name: Sign the installer
+    - name: Find the installer
       shell: bash
       run: |
-        installer="$(find . -name '*_Setup.exe' -print | head -n 1)"
-        set -x
-        # TODO - ls for now to verify that we're looking in the right place
-        ls -l "$installer"
+        installer="$(ls -t .app/*_Setup.exe | head -n 1)"
         # pass installer to next step
         echo "installer=$installer" >> "$GITHUB_ENV"
+
+    - name: Sign the installer
+      uses: ${{ github.action_path }}/sign
+      with:
+        executable: ${{ env.installer }}
 
     - name: Post the installer
       uses: actions/upload-artifact@v3
