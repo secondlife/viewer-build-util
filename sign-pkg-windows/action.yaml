@@ -22,17 +22,17 @@ runs:
         path: .app
 
     - name: Sign the viewer
-      uses: ${{ github.action_path }}/sign
+      uses: ./sign
       with:
         executable: .app/SecondLifeViewer.exe
 
     - name: Sign the updater
-      uses: ${{ github.action_path }}/sign
+      uses: ./sign
       with:
         executable: .app/SLVersionChecker.exe
 
     - name: Sign dullahan_host
-      uses: ${{ github.action_path }}/sign
+      uses: ./sign
       with:
         executable: .app/llplugin/dullahan_host.exe
 
@@ -81,7 +81,7 @@ runs:
         echo "installer=$installer" >> "$GITHUB_ENV"
 
     - name: Sign the installer
-      uses: ${{ github.action_path }}/sign
+      uses: ./sign
       with:
         executable: ${{ env.installer }}
 
