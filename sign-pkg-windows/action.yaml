@@ -72,7 +72,8 @@ runs:
     - name: Sign the installer
       shell: bash
       run: |
-        installer="$(ls -t *_Setup.exe | head -n 1)"
+        installer="$(find . -name '*_Setup.exe' -print | head -n 1)"
+        set -x
         # TODO - ls for now to verify that we're looking in the right place
         ls -l "$installer"
         # pass installer to next step
