@@ -95,11 +95,11 @@ def sign(executable, *, service: Iterable, certificate,
         time.sleep(delay)
         delay *= backoff
         # round-robin between listed services
-        service = services[retry % len(services)]
+        svc = service[retry % len(service)]
         done = subprocess.run(
             [signtool, 'sign',
              '/f', certificate,
-             '/t', service,
+             '/t', svc,
              '/d', description,
              '/fd', 'sha256',
              '/v',
