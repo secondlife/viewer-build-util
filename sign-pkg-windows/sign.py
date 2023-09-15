@@ -69,6 +69,9 @@ def sign(executable, *, service: Iterable, certificate,
     try:
         VerBinPath = vsvars['WindowsSdkVerBinPath']
     except KeyError:
+        from pprint import pprint
+        pprint({ key: value for key, value in vsvars.items() if 'Kits' in value },
+               file=sys.stderr)
         raise Error(f"WindowsSdkVerBinPath not set by VS version {vsver}")
 
     signtool = Path(VerBinPath) / 'X64' / 'signtool.exe'
