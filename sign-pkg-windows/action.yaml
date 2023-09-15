@@ -22,6 +22,14 @@ runs:
       shell: bash
       run: pip install pyng autobuild
 
+    - name: Decode certificate file
+      shell: bash
+      env:
+        SIGNING_CERT_WINDOWS: ${{ secrets.SIGNING_CERT_WINDOWS }}
+      run: |
+        mkdir -p .cert
+        echo "$SIGNING_CERT_WINDOWS" | base64 --decode > .cert/authenticode-cert.pfx
+
     - name: Sign the executables
       shell: bash
       run: |
@@ -31,7 +39,7 @@ runs:
         do
             python "${{ github.action_path }}/sign.py" \
                    --service ${{ inputs.services }} \
-                   --certificate "authenticode-cert.pfx" \
+                   --certificate ".cert/authenticode-cert.pfx" \
                    "$exe"
         done
 
@@ -77,7 +85,7 @@ runs:
         echo "installer=$installer" >> "$GITHUB_ENV"
         python "${{ github.action_path }}/sign.py" \
                --service ${{ inputs.services }} \
-               --certificate "authenticode-cert.pfx" \
+               --certificate ".cert/authenticode-cert.pfx" \
                "$installer"
 
     - name: Post the installer

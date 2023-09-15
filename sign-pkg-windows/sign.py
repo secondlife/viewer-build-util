@@ -109,6 +109,7 @@ def sign(executable, *, service: Iterable, certificate,
             text=True)
         if done.returncode == 0:
             break
+        print(done.stdout, file=sys.stderr)
     else:
         print(f'Sign tool failed after {retries} attempts', file=sys.stderr)
         print(done.stdout, file=sys.stderr)
