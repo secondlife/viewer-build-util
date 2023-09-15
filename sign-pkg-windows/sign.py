@@ -52,6 +52,8 @@ def sign(executable, *, service: Iterable, certificate,
     description: pass to signtool
     """
     # First, locate signtool.
+    # Don't even pretend to support 32-bit any more.
+    os.environ['AUTOBUILD_ADDRSIZE'] = '64'
     try:
         vsver = _available_vsvers()[-1]
     except SourceEnvError as err:
