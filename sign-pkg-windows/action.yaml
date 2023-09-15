@@ -30,7 +30,7 @@ runs:
                    .app/llplugin/dullahan_host.exe
         do
             python "${{ github.action_path }}/sign.py" \
-                   --services ${{ inputs.services }} \
+                   --service ${{ inputs.services }} \
                    --certificate "authenticode-cert.pfx" \
                    "$exe"
         done
@@ -76,7 +76,7 @@ runs:
         # pass installer to next step
         echo "installer=$installer" >> "$GITHUB_ENV"
         python "${{ github.action_path }}/sign.py" \
-               --services ${{ inputs.services }} \
+               --service ${{ inputs.services }} \
                --certificate "authenticode-cert.pfx" \
                "$installer"
 
