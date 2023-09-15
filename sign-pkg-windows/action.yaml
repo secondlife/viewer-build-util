@@ -3,6 +3,10 @@ description:
   Sign and package the Windows Linden viewer.
 
 inputs:
+  certificate:
+    description: "path to certificate file"
+    type: string
+    required: true
   services:
     description: "space-separated list of timestamp service URLs"
     type: string
@@ -22,14 +26,6 @@ runs:
       shell: bash
       run: pip install pyng autobuild
 
-    - name: Decode certificate file
-      shell: bash
-      env:
-        SIGNING_CERT_WINDOWS: ${{ secrets.SIGNING_CERT_WINDOWS }}
-      run: |
-        mkdir -p .cert
-        echo "$SIGNING_CERT_WINDOWS" | base64 --decode > .cert/authenticode-cert.pfx
-
     - name: Sign the executables
       shell: bash
       run: |
@@ -39,7 +35,7 @@ runs:
         do
             python "${{ github.action_path }}/sign.py" \
                    --service ${{ inputs.services }} \
-                   --certificate ".cert/authenticode-cert.pfx" \
+                   --certificate "${{ inputs.certificate }}" \
                    "$exe"
         done
 
@@ -85,7 +81,7 @@ runs:
         echo "installer=$installer" >> "$GITHUB_ENV"
         python "${{ github.action_path }}/sign.py" \
                --service ${{ inputs.services }} \
-               --certificate ".cert/authenticode-cert.pfx" \
+               --certificate "${{ inputs.certificate }}" \
                "$installer"
 
     - name: Post the installer
