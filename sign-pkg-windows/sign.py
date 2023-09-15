@@ -67,7 +67,11 @@ def sign(executable, *, service: Iterable, certificate,
         raise Error(str(err)) from err
 
     try:
-        VerBinPath = vsvars['WindowsSdkVerBinPath']
+        # load_vsvars() returns an ordinary Python dict, that is,
+        # case-sensitive. Empirically the keys are all uppercase. We could go
+        # through the exercise of loading this data into a case-insensitive
+        # dict, but it's simpler to use an uppercase key.
+        VerBinPath = vsvars['WINDOWSSDKVERBINPATH']
     except KeyError:
         from pprint import pprint
         pprint({ key: value for key, value in vsvars.items() if 'Kits' in value },
