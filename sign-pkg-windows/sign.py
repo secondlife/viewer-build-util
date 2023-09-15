@@ -10,6 +10,8 @@ Copyright (c) 2023, Linden Research, Inc.
 $/LicenseInfo$
 """
 
+from autobuild.autobuild_tool_source_environment import (
+    load_vsvars, _available_vsvers, SourceEnvError)
 from collections.abc import Iterable
 from datetime import datetime, timedelta
 import os
@@ -49,8 +51,24 @@ def sign(executable, *, service: Iterable, certificate,
     certwarning: warn if certificate will expire in fewer than this many days
     description: pass to signtool
     """
-    VerBinPath = os.getenv('WindowsSdkVerBinPath')
-    assert VerBinPath, '$WindowsSdkVerBinPath must be set'
+    # First, locate signtool.
+    try:
+        vsver = _available_vsvers()[-1]
+    except SourceEnvError as err:
+        raise Error(str(err)) from err
+    except IndexError:
+        raise Error("Can't determine latest Visual Studio version, is it installed?")
+
+    try:
+        vsvars = load_vsvars(vsver)
+    except SourceEnvError as err:
+        raise Error(str(err)) from err
+
+    try:
+        VerBinPath = vsvars['WindowsSdkVerBinPath']
+    except KeyError:
+        raise Error(f"WindowsSdkVerBinPath not set by VS version {vsver}")
+
     signtool = Path(VerBinPath) / 'X64' / 'signtool.exe'
     assert signtool.is_file()
 
