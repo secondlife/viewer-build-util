@@ -18,6 +18,10 @@ runs:
         name: Windows-app
         path: .app
 
+    - name: Install Python dependencies
+      shell: bash
+      run: pip install pyng
+
     - name: Sign the executables
       shell: bash
       run: |
