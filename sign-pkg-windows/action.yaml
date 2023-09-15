@@ -2,15 +2,12 @@ name: sign-pkg-windows
 description:
   Sign and package the Windows Linden viewer.
 
-##inputs:
-##  channel:
-##    description: "Viewer channel"
-##    type: string
-##    required: true
-##  version:
-##    description: "Viewer version"
-##    type: string
-##    required: true
+inputs:
+  services:
+    description: "space-separated list of timestamp service URLs"
+    type: string
+    required: false
+    default: "http://timestamp.globalsign.com/scripts/timstamp.dll http://timestamp.comodoca.com/authenticode"
 
 runs:
   using: composite
@@ -21,20 +18,18 @@ runs:
         name: Windows-app
         path: .app
 
-    - name: Sign the viewer
-      uses: ./sign
-      with:
-        executable: .app/SecondLifeViewer.exe
-
-    - name: Sign the updater
-      uses: ./sign
-      with:
-        executable: .app/SLVersionChecker.exe
-
-    - name: Sign dullahan_host
-      uses: ./sign
-      with:
-        executable: .app/llplugin/dullahan_host.exe
+    - name: Sign the executables
+      shell: bash
+      run: |
+        for exe in .app/SecondLifeViewer.exe \
+                   .app/SLVersionChecker.exe \
+                   .app/llplugin/dullahan_host.exe
+        do
+            python "${{ github.action_path }}/sign.py" \
+                   --services ${{ inputs.services }} \
+                   --certificate "authenticode-cert.pfx" \
+                   "$exe"
+        done
 
     - name: Build the installer
       id: nsis
@@ -46,20 +41,17 @@ runs:
         # variable.
         import os
         import shlex
+        from shutil import which
         import subprocess
-        nsis_path = "makensis.exe"
-        try:
-            for program_files in os.getenv('programfiles'), os.getenv('programfiles(x86)'):
-                if program_files:
-                    for subpath in 'NSIS', r'NSIS\Unicode':
-                        possible_path = os.path.join(program_files, subpath, nsis_path)
-                        if os.path.isfile(possible_path):
-                            nsis_path = possible_path
-                            # don't just break: we need to exit multiple
-                            # levels of 'for' loop
-                            raise StopIteration()
-        except StopIteration:
-            pass
+        nsis_path = which(
+            "makensis",
+            path=os.pathsep.join(
+                os.path.join(program_files, subpath)
+                for program_files in
+                (os.getenv(var) for var in ('programfiles', 'programfiles(x86)'))
+                for subpath in ('NSIS', r'NSIS\Unicode')
+                if program_files))
+        assert nsis_path
 
         # This .nsi file was prepared by viewer_manifest.py (by substituting
         # values into a template .nsi file) and bundled into the top level of
@@ -73,17 +65,16 @@ runs:
       shell: bash
       run: cat '.app/secondlife_setup_tmp.nsi'
 
-    - name: Find the installer
+    - name: Sign the installer
       shell: bash
       run: |
         installer="$(ls -t .app/*_Setup.exe | head -n 1)"
         # pass installer to next step
         echo "installer=$installer" >> "$GITHUB_ENV"
-
-    - name: Sign the installer
-      uses: ./sign
-      with:
-        executable: ${{ env.installer }}
+        python "${{ github.action_path }}/sign.py" \
+               --services ${{ inputs.services }} \
+               --certificate "authenticode-cert.pfx" \
+               "$installer"
 
     - name: Post the installer
       uses: actions/upload-artifact@v3
