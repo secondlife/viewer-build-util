@@ -18,6 +18,7 @@ import os
 from pathlib import Path
 from pyng.commands import Commands
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -81,6 +82,8 @@ def sign(executable, *, service: Iterable, certificate,
     signtool = Path(VerBinPath) / 'X64' / 'signtool.exe'
     assert signtool.is_file()
 
+    name = Path(executable).name
+
     # If we bang on the timestamp server too hard by signing executables
     # back-to-back, we may get throttled.
     # "Error: SignerSign() failed. (-1073700864/0xc000a000)"
@@ -90,49 +93,49 @@ def sign(executable, *, service: Iterable, certificate,
     done = None
     for retry in range(retries):
         if retry:
-            print(f'signing {retry} failed, ', end='', file=sys.stderr)
-        print(f'waiting {delay} seconds', file=sys.stderr)
+            print(f'{name} signing {retry} failed, ', end='', file=sys.stderr)
+        print(f'waiting {delay:.1f} seconds', file=sys.stderr)
         time.sleep(delay)
         delay *= backoff
         # round-robin between listed services
         svc = service[retry % len(service)]
-        done = subprocess.run(
-            [signtool, 'sign',
-             '/f', certificate,
-             '/t', svc,
-             '/d', description,
-             '/fd', 'sha256',
-             '/v',
-             executable],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True)
+        command = [signtool, 'sign',
+                   '/f', certificate,
+                   '/t', svc,
+                   '/d', description,
+                   '/fd', 'sha256',
+                   '/v',
+                   executable]
+        print(f'{name} attempt {retry+1}:', shlex.join(command))
+        done = subprocess.run(command,
+                              stdout=subprocess.PIPE,
+                              stderr=subprocess.STDOUT,
+                              text=True)
+        print(done.stdout, end='')
         if done.returncode == 0:
             break
-        print(done.stdout, file=sys.stderr)
     else:
-        print(f'Sign tool failed after {retries} attempts', file=sys.stderr)
-        print(done.stdout, file=sys.stderr)
-        sys.exit('Giving up...')
+        raise Error(f'{name} signing failed after {retries} attempts, giving up')
 
     # Here the last of the retries succeeded, setting 'done'
     rc = done.returncode
     print('Signing succeeded')
     # Check the certificate expiration date in the output to warn of imminent expiration
-    expiration = None
     for line in done.stdout.splitlines():
-        print(line)
         found = ExpiresLine.search(line)
         if found:
             # month is an abbreviated name, translate
             try:
                 expiration = datetime.strptime(' '.join(found.groups()), '%b %d %Y')
             except ValueError:
-                print('failed to parse expiration from:', line, file=sys.stderr)
-                rc = 1
-    if not expiration:
-        sys.exit('Failed to find certificate expiration date')
-    if expiration < datetime.now() + timedelta(certwarning):
+                raise Error('failed to parse expiration from: ' + line)
+            else:
+                break
+    else:
+        raise Error('Failed to find certificate expiration date')
+    expires = expiration - datetime.now()
+    print(f'Certificate expires in {expires.days}')
+    if expires < timedelta(certwarning):
         print(f'::warning::Certificate expires soon: {expiration}')
     return rc
 
