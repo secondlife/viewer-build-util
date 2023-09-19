@@ -41,6 +41,7 @@ runs:
         exclude: ${{ inputs.exclude }}
         prefix: ${{ inputs.prefix }}
       run: |
+        set -x
         # convert newline-separated input strings to bash arrays
         if [[ -n "$exclude" ]]
         then readarray -t excludes <<< "$exclude"
