@@ -106,7 +106,11 @@ def sign(executable, *, service: Iterable, certificate,
                    '/fd', 'sha256',
                    '/v',
                    executable]
-        print(f'{name} attempt {retry+1}:', shlex.join(command))
+        try:
+            print(f'{name} attempt {retry+1}:', shlex.join(command))
+        except TypeError:
+            print(repr(command))
+            raise
         done = subprocess.run(command,
                               stdout=subprocess.PIPE,
                               stderr=subprocess.STDOUT,
