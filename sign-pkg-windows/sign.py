@@ -99,7 +99,7 @@ def sign(executable, *, service: Iterable, certificate,
         delay *= backoff
         # round-robin between listed services
         svc = service[retry % len(service)]
-        command = [signtool, 'sign',
+        command = [str(signtool), 'sign',
                    '/f', certificate,
                    '/t', svc,
                    '/d', description,
