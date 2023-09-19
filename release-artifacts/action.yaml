@@ -1,0 +1,57 @@
+name: release-artifacts
+description: >-
+  Given a directory containing artifact subtrees downloaded by (e.g.)
+  actions/download-artifact, organize their contents into a single flat
+  directory suitable for posting as release assets using (e.g.)
+  action-gh-release. Resolve filename conflicts by prepending some or all of
+  the original subdirectory path.
+
+inputs:
+  input-path:
+    description: "Path into which build artifacts have been downloaded and unzipped"
+    type: string
+    required: true
+  output-path:
+    description: "Path into which flattened artifact files should be placed"
+    type: string
+    required: true
+  exclude:
+    description: "Newline-separated list of artifacts to ignore"
+    type: string
+    required: false
+  prefix:
+    description: >-
+      Newline-separated list of artifact-name=prefix: to resolve filename
+      collisions, prepend 'prefix' instead of 'artifact-name'
+    type: string
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: Install Python dependencies
+      shell: bash
+      run: pip3 install pyng
+
+    - name: Flatten artifact files as release assets
+      shell: bash
+      env:
+        input_path: ${{ inputs.input-path }}
+        output_path: ${{ inputs.output-path }}
+        exclude: ${{ inputs.exclude }}
+        prefix: ${{ inputs.prefix }}
+      run: |
+        # convert newline-separated input strings to bash arrays
+        if [[ -n "$exclude" ]]
+        then readarray -t excludes <<< "$exclude"
+        else excludes=()
+        fi
+        if [[ -n "$prefix" ]]
+        then readarray -t prefixes <<< "$prefix"
+        else prefixes=()
+        fi
+        python ${{ github.action_path }}/flatten_files.py \
+               "$output_path" \
+               --input "$input_path" \
+               ${excludes:+--exclude} "${excludes[@]}" \
+               ${prefixes:+--prefix}  "${prefixes[@]}"
