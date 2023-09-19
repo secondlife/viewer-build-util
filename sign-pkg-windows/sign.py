@@ -75,8 +75,7 @@ def sign(executable, *, service: Iterable, certificate,
         VerBinPath = vsvars['WINDOWSSDKVERBINPATH']
     except KeyError:
         from pprint import pprint
-        pprint({ key: value for key, value in vsvars.items() if 'Kits' in value },
-               sys.stderr)
+        pprint({ key: value for key, value in vsvars.items() if 'Kits' in value })
         raise Error(f"WindowsSdkVerBinPath not set by VS version {vsver}")
 
     signtool = Path(VerBinPath) / 'X64' / 'signtool.exe'
@@ -93,8 +92,8 @@ def sign(executable, *, service: Iterable, certificate,
     done = None
     for retry in range(retries):
         if retry:
-            print(f'{name} signing {retry} failed, ', end='', file=sys.stderr)
-        print(f'waiting {delay:.1f} seconds', file=sys.stderr)
+            print(f'{name} signing {retry} failed, ', end='')
+        print(f'waiting {delay:.1f} seconds')
         time.sleep(delay)
         delay *= backoff
         # round-robin between listed services
@@ -138,7 +137,7 @@ def sign(executable, *, service: Iterable, certificate,
     else:
         raise Error('Failed to find certificate expiration date')
     expires = expiration - datetime.now()
-    print(f'Certificate expires in {expires.days}')
+    print(f'Certificate expires in {expires.days} days')
     if expires < timedelta(certwarning):
         print(f'::warning::Certificate expires soon: {expiration}')
     return rc
