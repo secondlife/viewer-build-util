@@ -24,7 +24,7 @@ runs:
     - name: Set up and sign the app sparseimage
       shell: bash
       run: |
-        set -x
+        set -x -e
         # MBW -- If the mounted volume name changes, it breaks the .DS_Store's
         #  background image and icon positioning. If we really need
         #  differently named volumes, we'll need to create multiple DS_Store
@@ -46,11 +46,11 @@ runs:
         # mount the image and get the name of the mount point and device node
         hdi_output="$(hdiutil attach -private "$sparsename")"
 
-        # with (implicit) set -e in effect, test has the force of an assert
-        [[ "$hdi_output" =~ /dev/disk([0-9]+)[^s] ]]
-        devfile="${BASH_REMATCH[0]}"
+        # with set -e in effect, test has the force of an assert
+        [[ "$hdi_output" =~ (/dev/disk[0-9]+)[^s] ]]
+        devfile="${BASH_REMATCH[1]}"
         echo "devfile=$devfile" >> "$GITHUB_ENV"
-        [[ "$hdi_output" =~ HFS\\s+(.+) ]]
+        [[ "$hdi_output" =~ HFS[[:space:]]+(.+) ]]
         volpath="${BASH_REMATCH[1]}"
 
         # copy everything to the mounted sparseimage
