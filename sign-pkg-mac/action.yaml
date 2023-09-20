@@ -2,15 +2,15 @@ name: sign-pkg-mac
 description:
   Sign and package the macOS Linden viewer.
 
-##inputs:
-##  channel:
-##    description: "Viewer channel"
-##    type: string
-##    required: true
-##  version:
-##    description: "Viewer version"
-##    type: string
-##    required: true
+inputs:
+  imagename:
+    description: "Basename of installer .dmg"
+    type: string
+    required: true
+  channel:
+    description: "Viewer channel"
+    type: string
+    required: true
 
 runs:
   using: composite
@@ -20,3 +20,118 @@ runs:
       with:
         name: macOS-app
         path: .app
+
+    - name: Set up and sign the app sparseimage
+      shell: bash
+      run: |
+        set -x
+        # MBW -- If the mounted volume name changes, it breaks the .DS_Store's
+        #  background image and icon positioning. If we really need
+        #  differently named volumes, we'll need to create multiple DS_Store
+        #  file images, or use some other trick.
+        # DO NOT CHANGE without understanding comment above
+        channel_vendor_base='Second Life'
+        volname="$channel_vendor_base Installer"
+        sparsename="${{ inputs.imagename}}.sparseimage"
+        rm "$sparsename" || true
+        echo "sparsename=$sparsename" >> "$GITHUB_ENV"
+
+        # The capacity of the .sparseimage, which sometimes needs to be
+        # changed, is hard-coded here instead of defined as an input because
+        # changing it here allows us to rerun just this job. Changing it in
+        # the viewer's build.yaml would require first rebuilding the viewer.
+        hdiutil create "$sparsename" -volname "$volname" -fs HFS+ \
+                -type SPARSE -megabytes 1300 -layout SPUD
+
+        # mount the image and get the name of the mount point and device node
+        hdi_output="$(hdiutil attach -private "$sparsename")"
+
+        # with (implicit) set -e in effect, test has the force of an assert
+        [[ "$hdi_output" =~ /dev/disk([0-9]+)[^s] ]]
+        devfile="${BASH_REMATCH[0]}"
+        echo "devfile=$devfile" >> "$GITHUB_ENV"
+        [[ "$hdi_output" =~ HFS\\s+(.+) ]]
+        volpath="${BASH_REMATCH[1]}"
+
+        # copy everything to the mounted sparseimage
+
+        # What follows is oddly based on a predefined .DS_Store file, which
+        # apparently used to be one of several -- despite the presence of
+        # dmg-cleanup.applescript since at least 2009. Leaving legacy behavior
+        # for now, albeit with files transplanted from the viewer repo.
+        installfiles="${{ github.action_path }}/installer"
+        dmg_prefill="$installfiles/release-dmg"
+        for f in _VolumeIcon.icns _DS_Store background.jpg
+        do
+            dest="$volpath/${f/_/.}"
+            cp -v "$dmg_prefill/$f" "$dest"
+            # hide the files used only to control the Finder display
+            SetFile -a V "$dest"
+        done
+
+        # don't forget the application itself
+        if [[ "${{ inputs.channel }}" == "$channel_vendor_base Release" ]]
+        then app_name="$channel_vendor_base Viewer"
+        else app_name="${{ inputs.channel }}"
+        fi
+        cp -a ".app/$app_name.app" "$volpath/"
+
+        # Create the alias file (which is a resource file) from the .r
+        Rez "$dmg_prefill/Applications-alias.r" -o "$volpath/Applications"
+
+        # Set the alias file's alias and custom icon bits
+        SetFile -a AC "$volpath/Applications"
+
+        # Set the disk image root's custom icon bit
+        SetFile -a C "$volpath"
+
+        # Sign the app; do this in the copy that's in the .dmg so that the
+        # extended attributes used by the signature are preserved; moving the
+        # files would leave them behind and invalidate the signatures.
+        # TODO ^
+        # n.b. $installfiles/apple-notarize.sh
+        #      $installfiles/slplugin.entitlements
+
+    - name: Unmount the sparseimage
+      # unmount even if the above fails
+      if: ${{ ! cancelled() }}
+      shell: bash
+      run: |
+        # Empirically, on GitHub we've hit errors like:
+        # hdiutil: couldn't eject "disk10" - Resource busy
+        retries=3
+        retry_wait=2
+        for (( attempt=0; attempt < $retries; attempt+=1 ))
+        do
+            if [[ $attempt -gt 0 ]]
+            then
+                echo "detach $attempt failed, waiting $retry_wait seconds before retrying" >&2
+                sleep $retry_wait
+                (( retry_wait*=2 ))
+            fi
+            hdiutil detach -force ${{ env.devfile }} && break
+        done
+        if [[ $? -ne 0 ]]
+        then echo "::warning::$retries attempts to detach ${{ env.devfile }} failed"
+        fi
+
+    - name: Package the sparseimage as .dmg
+      shell: bash
+      run: |
+        set -x
+        mkdir -p .installer
+        installer=".installer/${{ inputs.imagename }}.dmg"
+        rm "$installer" || true
+        # pass installer to next step
+        echo "installer=$installer" >> "$GITHUB_ENV"
+
+        hdiutil convert "${{ env.sparsename }}" -format UDZO -imagekey zlib-level=9 \
+                -o "$installer"
+        rm "${{ env.sparsename }}"
+
+    - name: Post the installer
+      uses: actions/upload-artifact@v3
+      with:
+        name: "macOS-installer"
+        path: ${{ env.installer }}
+
