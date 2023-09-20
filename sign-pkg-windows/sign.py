@@ -139,7 +139,7 @@ def sign(executable, *, service: Iterable, certificate,
     expires = expiration - datetime.now()
     print(f'Certificate expires in {expires.days} days')
     if expires < timedelta(certwarning):
-        print(f'::warning::Certificate expires soon: {expiration}')
+        print(f'::warning::Certificate expires in {expires.days} days: {expiration}')
     return rc
 
 
