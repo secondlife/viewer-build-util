@@ -41,7 +41,7 @@ runs:
         # changing it here allows us to rerun just this job. Changing it in
         # the viewer's build.yaml would require first rebuilding the viewer.
         hdiutil create "$sparsename" -volname "$volname" -fs HFS+ \
-                -type SPARSE -megabytes 1300 -layout SPUD
+                -type SPARSE -megabytes 2000 -layout SPUD
 
         # mount the image and get the name of the mount point and device node
         hdi_output="$(hdiutil attach -private "$sparsename")"
