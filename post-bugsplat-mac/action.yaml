@@ -34,7 +34,7 @@ runs:
         path: _artifacts
 
     - name: Post to BugSplat
-      uses: secondlife-3p/symbol-upload@reusable-action
+      uses: BugSplat-Git/symbol-upload@v6
       with:
         username: "${{ inputs.username }}"
         password: "${{ inputs.password }}"
