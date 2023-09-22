@@ -1,0 +1,34 @@
+function retry_loop() {
+    if [[ $# -lt 4 ]]
+    then
+        echo "\
+Usage: retry_loop 'description' retries wait command [args]...
+where:
+description is for messaging (e.g. signing myapp.exe)
+retries is the overall number of attempts, including the first
+wait is the initial time in seconds to wait between attempts,
+     doubled after each failure" >&2
+        exit 1
+    fi
+
+    local desc="$1"
+    local retries=$2
+    local wait=$3
+    shift 3
+    local i
+    for (( i=0; i < $retries; i+=1 ))
+    do
+        if [[ $i -gt 0 ]]
+        then
+            echo "$desc attempt $i failed, waiting $wait seconds"
+            sleep $wait
+            (( wait*=2 ))
+        fi
+        echo "$desc attempt $(( i+1 ))"
+        echo "${@@Q}"
+        "$@" && return
+        rc=$?
+    done
+    echo "::warning::$desc failed after $retries attempts, giving up"
+    return $rc
+}

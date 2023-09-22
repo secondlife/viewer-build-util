@@ -11,6 +11,34 @@ inputs:
     description: "Viewer channel"
     type: string
     required: true
+  cert_base64:
+    description: "base64-encoded signing certificate"
+    type: string
+    required: true
+  cert_name:
+    description: "full name of signing certificate"
+    type: string
+    required: true
+  cert_pass:
+    description: "signing certificate password"
+    type: string
+    required: true
+  note_apple_id:
+    description: "Apple ID for account"
+    type: string
+    required: true
+  note_pass:
+    description: "app-specific password"
+    type: string
+    required: true
+  note_team:
+    description: "Team ID for account"
+    type: string
+    required: true
+  keychain_pass:
+    description: "keychain password"
+    type: string
+    required: true
 
 runs:
   using: composite
@@ -21,7 +49,7 @@ runs:
         name: macOS-app
         path: .app
 
-    - name: Set up and sign the app sparseimage
+    - name: Set up the app sparseimage
       shell: bash
       run: |
         set -x -e
@@ -59,8 +87,7 @@ runs:
         # apparently used to be one of several -- despite the presence of
         # dmg-cleanup.applescript since at least 2009. Leaving legacy behavior
         # for now, albeit with files transplanted from the viewer repo.
-        installfiles="${{ github.action_path }}/installer"
-        dmg_prefill="$installfiles/release-dmg"
+        dmg_prefill="${{ github.action_path }}/installer/release-dmg"
         for f in _VolumeIcon.icns _DS_Store background.jpg
         do
             dest="$volpath/${f/_/.}"
@@ -75,6 +102,7 @@ runs:
         else app_name="${{ inputs.channel }}"
         fi
         cp -a ".app/$app_name.app" "$volpath/"
+        echo "app_path=$volpath/$app_name.app" >> "$GITHUB_ENV"
 
         # Create the alias file (which is a resource file) from the .r
         Rez "$dmg_prefill/Applications-alias.r" -o "$volpath/Applications"
@@ -85,12 +113,21 @@ runs:
         # Set the disk image root's custom icon bit
         SetFile -a C "$volpath"
 
+    - name: Sign and notarize the app
+      shell: bash
+      env:
+        cert_base64: "${{ inputs.cert_base64 }}"
+        cert_name: "${{ inputs.cert_name }}"
+        cert_pass: "${{ inputs.cert_pass }}"
+        note_apple_id: "${{ inputs.note_apple_id }}"
+        note_pass: "${{ inputs.note_pass }}"
+        note_team: "${{ inputs.note_team }}"
+        keychain_pass: "${{ inputs.keychain_pass }}"
+      run: |
         # Sign the app; do this in the copy that's in the .dmg so that the
         # extended attributes used by the signature are preserved; moving the
         # files would leave them behind and invalidate the signatures.
-        # TODO ^
-        # n.b. $installfiles/apple-notarize.sh
-        #      $installfiles/slplugin.entitlements
+        "${{ github.action_path }}/sign.sh" "${{ env.app_path }}"
 
     - name: Unmount the sparseimage
       # unmount even if the above fails
