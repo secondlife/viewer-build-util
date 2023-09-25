@@ -23,20 +23,16 @@ inputs:
     description: "signing certificate password"
     type: string
     required: true
-  note_apple_id:
-    description: "Apple ID for account"
+  note_user:
+    description: "notarization username"
     type: string
     required: true
   note_pass:
-    description: "app-specific password"
+    description: "notarization password"
     type: string
     required: true
-  note_team:
-    description: "Team ID for account"
-    type: string
-    required: true
-  keychain_pass:
-    description: "keychain password"
+  note_asc:
+    description: "notarization asc-provider"
     type: string
     required: true
 
@@ -119,10 +115,9 @@ runs:
         cert_base64: "${{ inputs.cert_base64 }}"
         cert_name: "${{ inputs.cert_name }}"
         cert_pass: "${{ inputs.cert_pass }}"
-        note_apple_id: "${{ inputs.note_apple_id }}"
+        note_user: "${{ inputs.note_user }}"
         note_pass: "${{ inputs.note_pass }}"
-        note_team: "${{ inputs.note_team }}"
-        keychain_pass: "${{ inputs.keychain_pass }}"
+        note_asc: "${{ inputs.note_asc }}"
       run: |
         # Sign the app; do this in the copy that's in the .dmg so that the
         # extended attributes used by the signature are preserved; moving the

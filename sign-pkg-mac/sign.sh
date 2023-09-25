@@ -5,15 +5,25 @@
 # cert_base64: base64-encoded signing certificate
 # cert_name: full name of signing certificate
 # cert_pass: signing certificate password
-# note_apple_id: Apple ID for account
-# note_pass: app-specific password
-# note_team: Team ID for account
-# keychain_pass: keychain password
+# note_user: notarization username
+# note_pass: notarization password
+# note_asc: notarization asc-provider
 
 mydir="$(dirname "$0")"
 app_path="$1"
 
 . "$mydir/retry_loop"
+
+gotall=true
+for var in app_path cert_base64 cert_name cert_pass note_user note_pass note_asc
+do
+    if [[ -z "${!var}" ]]
+    then
+        echo "Missing required parameter $var" >&2
+        gotall=false
+    fi
+done
+$gotall || exit 1
 
 set -x -e
 # ****************************************************************************
@@ -26,6 +36,9 @@ base64 --decode > certificate.p12 <<< "$cert_base64"
 # We need to create a new keychain, otherwise using the certificate will prompt
 # with a UI dialog asking for the certificate password, which we can't
 # use in a headless CI environment
+# Create a local keychain password
+keychain_pass="$(dd bs=8 count=1 if=/dev/urandom 2>/dev/null | base64)"
+echo "::add-mask::$keychain_pass"
 security create-keychain -p "$keychain_pass" build.keychain 
 security default-keychain -s build.keychain
 security unlock-keychain -p "$keychain_pass" build.keychain
@@ -33,6 +46,7 @@ security import certificate.p12 -k build.keychain -P "$cert_pass" \
          -T /usr/bin/codesign
 security set-key-partition-list -S 'apple-tool:,apple:,codesign:' -s \
          -k "$keychain_pass" build.keychain
+rm certificate.p12
 
 # ****************************************************************************
 #   sign executables
@@ -79,7 +93,7 @@ set +x
 echo "Create keychain profile"
 profile="notarytool-profile"
 xcrun notarytool store-credentials "$profile" \
-      --apple-id "$note_apple_id" --team-id "$note_team" --password "$note_pass"
+      --username "$note_user" --password "$note_pass" --asc-provider "$note_asc"
 set -x
 
 # We can't notarize an app bundle directly, but we need to compress it as an
@@ -97,7 +111,7 @@ then
 fi
 trap "rm '$zip_file' EXIT"
 
-# Here we send the notarization request to the Apple's Notarization service,
+# Here we send the notarization request to Apple's Notarization service,
 # waiting for the result. This typically takes a few seconds inside a CI
 # environment, but it might take more depending on the App characteristics.
 # Visit the Notarization docs for more information and strategies on how to
@@ -105,8 +119,8 @@ trap "rm '$zip_file' EXIT"
 echo "Notarize app"
 # emit notarytool output to stderr in real time but also capture in variable
 set +e
-output="$(xcrun notarytool submit "$zip_file" \
-          --keychain-profile "$profile" --wait 2>&1 | \
+output="$(xcrun notarytool submit --wait --primary-bundle-id "com.secondlife.viewer" \
+          --keychain-profile "$profile" "$zip_file" 2>&1 | \
           tee /dev/stderr ; \
           exit ${PIPESTATUS[0]})"
 # Without the final 'exit' above, we'd be checking the rc from 'tee' rather
