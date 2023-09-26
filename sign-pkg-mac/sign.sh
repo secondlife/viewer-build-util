@@ -41,13 +41,14 @@ set +x
 keychain_pass="$(dd bs=8 count=1 if=/dev/urandom 2>/dev/null | base64)"
 echo "::add-mask::$keychain_pass"
 set -x
-security create-keychain -p "$keychain_pass" build.keychain 
-security default-keychain -s build.keychain
-security unlock-keychain -p "$keychain_pass" build.keychain
-security import certificate.p12 -k build.keychain -P "$cert_pass" \
+sleep 1
+security create-keychain -p "$keychain_pass" viewer.keychain 
+security default-keychain -s viewer.keychain
+security unlock-keychain -p "$keychain_pass" viewer.keychain
+security import certificate.p12 -k viewer.keychain -P "$cert_pass" \
          -T /usr/bin/codesign
 security set-key-partition-list -S 'apple-tool:,apple:,codesign:' -s \
-         -k "$keychain_pass" build.keychain
+         -k "$keychain_pass" viewer.keychain
 rm certificate.p12
 
 # ****************************************************************************
@@ -74,7 +75,7 @@ resources="$app_path/Contents/Resources"
 # plain signing
 for signee in "$resources"/llplugin/*.dylib
 do
-    signloop --force --timestamp --keychain build.keychain \
+    signloop --force --timestamp --keychain viewer.keychain \
              --sign "$cert_name" "$signee"
 done
 # deep signing
@@ -85,7 +86,7 @@ for signee in \
 do
     signloop --verbose --deep --force \
              --entitlements "$mydir/installer/slplugin.entitlements" \
-             --options runtime --keychain build.keychain \
+             --options runtime --keychain viewer.keychain \
              --sign "$cert_name" "$signee"
 done
 
@@ -94,15 +95,6 @@ spctl -a -texec -vvvv "$app_path"
 # ****************************************************************************
 #   notarize the app
 # ****************************************************************************
-# Store the notarization credentials so that we can prevent a UI password dialog
-# from blocking the CI
-set +x
-echo "Create keychain profile"
-profile="notarytool-profile"
-xcrun notarytool store-credentials "$profile" \
-      --apple-id "$note_user" --password "$note_pass" --asc-provider "$note_asc"
-set -x
-
 # We can't notarize an app bundle directly, but we need to compress it as an
 # archive. Therefore, we create a zip file containing our app bundle, so that
 # we can send it to the notarization service. Kind of funny to do this when
@@ -127,7 +119,8 @@ echo "Notarize app"
 # emit notarytool output to stderr in real time but also capture in variable
 set +e
 output="$(xcrun notarytool submit --wait --primary-bundle-id "com.secondlife.viewer" \
-          --keychain-profile "$profile" "$zip_file" 2>&1 | \
+          --username "$note_user" --password "$note_pass" --asc-provider "$note_asc" \
+          "$zip_file" 2>&1 | \
           tee /dev/stderr ; \
           exit ${PIPESTATUS[0]})"
 # Without the final 'exit' above, we'd be checking the rc from 'tee' rather
