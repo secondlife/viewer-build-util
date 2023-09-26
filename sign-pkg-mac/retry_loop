@@ -1,4 +1,9 @@
 function retry_loop() {
+    # save +x / -x state and suppress
+    xtrace="$(set +o | grep xtrace)"
+    set +x
+    trap "$xtrace" RETURN
+
     if [[ $# -lt 4 ]]
     then
         echo "\
