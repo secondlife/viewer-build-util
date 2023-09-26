@@ -61,7 +61,7 @@ runs:
         echo "app_name=$app_name" >> "$GITHUB_OUTPUT"
         set -x
         mkdir -p .app/$app_name.app
-        tar xjf -C ".app/$app_name.app" .tarball/*
+        tar -C ".app/$app_name.app" xjf .tarball/*
         ls -l ".app/$app_name.app"{,/Contents}
 
     - name: Set up the app sparseimage
