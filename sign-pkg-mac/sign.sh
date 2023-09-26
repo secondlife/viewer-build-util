@@ -37,8 +37,10 @@ base64 --decode > certificate.p12 <<< "$cert_base64"
 # with a UI dialog asking for the certificate password, which we can't
 # use in a headless CI environment
 # Create a local keychain password
+set +x
 keychain_pass="$(dd bs=8 count=1 if=/dev/urandom 2>/dev/null | base64)"
 echo "::add-mask::$keychain_pass"
+set -x
 security create-keychain -p "$keychain_pass" build.keychain 
 security default-keychain -s build.keychain
 security unlock-keychain -p "$keychain_pass" build.keychain
