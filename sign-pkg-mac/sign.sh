@@ -114,6 +114,8 @@ then
 fi
 trap "rm '$zip_file'" EXIT
 
+credentials=(--username "$note_user" --password "$note_pass" --asc-provider "$note_asc")
+
 # Here we send the notarization request to Apple's Notarization service,
 # waiting for the result. This typically takes a few seconds inside a CI
 # environment, but it might take more depending on the App characteristics.
@@ -122,9 +124,8 @@ trap "rm '$zip_file'" EXIT
 echo "Notarize app"
 # emit notarytool output to stderr in real time but also capture in variable
 set +e
-output="$(xcrun notarytool submit --wait --primary-bundle-id "com.secondlife.viewer" \
-          --username "$note_user" --password "$note_pass" --asc-provider "$note_asc" \
-          "$zip_file" 2>&1 | \
+output="$(xcrun notarytool submit --wait \
+          "${credentials[@]}" "$zip_file" 2>&1 | \
           tee /dev/stderr ; \
           exit ${PIPESTATUS[0]})"
 # Without the final 'exit' above, we'd be checking the rc from 'tee' rather
@@ -133,8 +134,9 @@ if [[ $? -ne 0 ]]
 then
     if [[ "$output" =~ 'id: '(.+$) ]]
     then
-        xcrun notarytool log "${BASH_REMATCH[1]}" --keychain-profile "$profile"
+        xcrun notarytool log "${BASH_REMATCH[1]}" "${credentials[@]}"
     fi
+    exit 1
 fi
 set -e
 
