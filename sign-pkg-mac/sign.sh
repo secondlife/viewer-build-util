@@ -101,14 +101,18 @@ spctl -a -texec -vvvv "$app_path"
 # actions/download-archive just downloaded and unpacked the artifact .zip
 # file, but oh well.
 echo "Creating temp notarization archive"
-zip_file="${app_path/.app/.zip}"
+app_base="$(basename "$app_path")"
+# Don't put the zipfile in the same sparseimage we're trying to sign and
+# notarize! That would require creating the sparseimage with extra room just
+# for the .zip, and there's no point.
+zip_file="$RUNNER_TEMP/${app_base/.app/.zip}"
 ditto -c -k --keepParent "$app_path" "$zip_file"
 if [[ ! -f "$zip_file" ]]
 then
     echo "Notarization error: ditto failed"
     exit 1
 fi
-trap "rm '$zip_file' EXIT"
+trap "rm '$zip_file'" EXIT
 
 # Here we send the notarization request to Apple's Notarization service,
 # waiting for the result. This typically takes a few seconds inside a CI
