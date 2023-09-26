@@ -100,7 +100,7 @@ set +x
 echo "Create keychain profile"
 profile="notarytool-profile"
 xcrun notarytool store-credentials "$profile" \
-      --username "$note_user" --password "$note_pass" --asc-provider "$note_asc"
+      --apple-id "$note_user" --password "$note_pass" --asc-provider "$note_asc"
 set -x
 
 # We can't notarize an app bundle directly, but we need to compress it as an
