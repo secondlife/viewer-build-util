@@ -60,7 +60,7 @@ signwait=15
 function signloop() {
     local exe
     # we pass the executable to sign as the last argument
-    eval exe=\$$#
+    eval exe=\${$#}
     exe="$(basename "$exe")"
     retry_loop "$exe signing" $retries $signwait /usr/bin/codesign "$@"
 }
