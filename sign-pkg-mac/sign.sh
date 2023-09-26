@@ -79,7 +79,7 @@ for signee in \
     "$app_path"
 do
     signloop --verbose --deep --force \
-             --entitlements "${{ github.action_path }}/installer/slplugin.entitlements" \
+             --entitlements "$mydir/installer/slplugin.entitlements" \
              --options runtime --keychain build.keychain \
              --sign "$cert_name" "$signee"
 done
