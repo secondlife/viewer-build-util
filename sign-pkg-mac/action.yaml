@@ -35,6 +35,11 @@ inputs:
     description: "notarization asc-provider"
     type: string
     required: true
+  channel_vendor_base:
+    description: "setting for all steps"
+    type: string
+    required: false
+    default: "Second Life"
 
 runs:
   using: composite
@@ -43,19 +48,33 @@ runs:
       uses: actions/download-artifact@v3
       with:
         name: macOS-app
-        path: .app
+        path: .tarball
+
+    - name: Unpack the tarball
+      id: unpack
+      shell: bash
+      run: |
+        if [[ "${{ inputs.channel }}" == "${{ inputs.channel_vendor_base }} Release" ]]
+        then app_name="${{ inputs.channel_vendor_base }} Viewer"
+        else app_name="${{ inputs.channel }}"
+        fi
+        echo "app_name=$app_name" >> "$GITHUB_OUTPUT"
+        set -x
+        mkdir -p .app/$app_name.app
+        tar xjf -C ".app/$app_name.app" .tarball/*
+        ls -l ".app/$app_name.app"{,/Contents}
 
     - name: Set up the app sparseimage
       shell: bash
       run: |
+        app_name="${{ steps.unpack.outputs.app_name }}"
         set -x -e
         # MBW -- If the mounted volume name changes, it breaks the .DS_Store's
         #  background image and icon positioning. If we really need
         #  differently named volumes, we'll need to create multiple DS_Store
         #  file images, or use some other trick.
         # DO NOT CHANGE without understanding comment above
-        channel_vendor_base='Second Life'
-        volname="$channel_vendor_base Installer"
+        volname="${{ inputs.channel_vendor_base }} Installer"
         sparsename="${{ inputs.imagename}}.sparseimage"
         rm "$sparsename" || true
         echo "sparsename=$sparsename" >> "$GITHUB_ENV"
@@ -93,10 +112,6 @@ runs:
         done
 
         # don't forget the application itself
-        if [[ "${{ inputs.channel }}" == "$channel_vendor_base Release" ]]
-        then app_name="$channel_vendor_base Viewer"
-        else app_name="${{ inputs.channel }}"
-        fi
         bsms="Contents/Frameworks/BugsplatMac.framework"
         bsm=".app/$app_name.app/$bsms"
         echo "In the build tree:"
