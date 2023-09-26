@@ -58,6 +58,11 @@ rm certificate.p12
 retries=3
 signwait=15
 function signloop() {
+    # save +x / -x state and suppress
+    xtrace="$(set +o | grep xtrace)"
+    set +x
+    trap "$xtrace" RETURN
+
     local exe
     # we pass the executable to sign as the last argument
     eval exe=\${$#}
