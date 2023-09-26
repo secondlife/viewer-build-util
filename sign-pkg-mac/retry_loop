@@ -25,10 +25,22 @@ wait is the initial time in seconds to wait between attempts,
             (( wait*=2 ))
         fi
         echo "$desc attempt $(( i+1 ))"
-        echo "${@@Q}"
+        # In bash 4+, we could write 'echo "${@@Q}", but sigh
+        quote "$@"
         "$@" && return
         rc=$?
     done
     echo "::warning::$desc failed after $retries attempts, giving up"
     return $rc
+}
+
+function quote() {
+    for arg
+    do
+        if [[ "$arg" =~ [[:space:]] ]]
+        then echo -n "'$arg' "
+        else echo -n "$arg "
+        fi
+    done
+    echo
 }
