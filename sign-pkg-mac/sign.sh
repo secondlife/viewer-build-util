@@ -124,8 +124,8 @@ credentials=(--username "$note_user" --password "$note_pass" --asc-provider "$no
 echo "Notarize app"
 # emit notarytool output to stderr in real time but also capture in variable
 set +e
-output="$(xcrun notarytool submit --wait \
-          "${credentials[@]}" "$zip_file" 2>&1 | \
+output="$(xcrun notarytool submit "$zip_file" --wait \
+          "${credentials[@]}" 2>&1 | \
           tee /dev/stderr ; \
           exit ${PIPESTATUS[0]})"
 # Without the final 'exit' above, we'd be checking the rc from 'tee' rather
