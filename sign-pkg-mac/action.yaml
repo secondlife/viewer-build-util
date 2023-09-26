@@ -62,7 +62,6 @@ runs:
         set -x
         mkdir -p ".app"
         tar xjf .tarball/* -C ".app"
-        ls -l .app/{,*.app{,/Contents}}
 
     - name: Set up the app sparseimage
       shell: bash
@@ -112,14 +111,7 @@ runs:
         done
 
         # don't forget the application itself
-        bsms="Contents/Frameworks/BugsplatMac.framework"
-        bsm=".app/$app_name.app/$bsms"
-        echo "In the build tree:"
-        ls -l "$bsm" "$bsm/Versions"
         cp -a ".app/$app_name.app" "$volpath/"
-        bsm="$volpath/$app_name.app/$bsms"
-        echo "In the sparseimage:"
-        ls -l "$bsm" "$bsm/Versions"
         echo "app_path=$volpath/$app_name.app" >> "$GITHUB_ENV"
 
         # Create the alias file (which is a resource file) from the .r
