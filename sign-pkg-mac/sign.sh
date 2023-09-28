@@ -114,7 +114,7 @@ then
 fi
 trap "rm '$zip_file'" EXIT
 
-credentials=(--apple-id "$note_user" --password "$note_pass")
+credentials=(--apple-id "$note_user" --password "$note_pass" --team-id "$note_asc")
 
 # Here we send the notarization request to Apple's Notarization service,
 # waiting for the result. This typically takes a few seconds inside a CI
