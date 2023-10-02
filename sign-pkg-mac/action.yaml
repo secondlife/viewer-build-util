@@ -24,15 +24,15 @@ inputs:
     type: string
     required: true
   note_user:
-    description: "notarization username"
+    description: "notarization Apple ID"
     type: string
     required: true
   note_pass:
-    description: "notarization password"
+    description: "password for note_user"
     type: string
     required: true
-  note_asc:
-    description: "notarization asc-provider"
+  note_team:
+    description: "Team ID for note_user"
     type: string
     required: true
   channel_vendor_base:
@@ -131,7 +131,7 @@ runs:
         cert_pass: "${{ inputs.cert_pass }}"
         note_user: "${{ inputs.note_user }}"
         note_pass: "${{ inputs.note_pass }}"
-        note_asc: "${{ inputs.note_asc }}"
+        note_team: "${{ inputs.note_team }}"
       run: |
         # Sign the app; do this in the copy that's in the .dmg so that the
         # extended attributes used by the signature are preserved; moving the

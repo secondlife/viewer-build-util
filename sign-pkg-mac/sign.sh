@@ -6,8 +6,8 @@
 # cert_name: full name of signing certificate
 # cert_pass: signing certificate password
 # note_user: notarization username
-# note_pass: notarization password
-# note_asc: notarization asc-provider
+# note_pass: password for note_user
+# note_team: Team ID for note_user
 
 mydir="$(dirname "$0")"
 app_path="$1"
@@ -15,7 +15,7 @@ app_path="$1"
 . "$mydir/retry_loop"
 
 gotall=true
-for var in app_path cert_base64 cert_name cert_pass note_user note_pass note_asc
+for var in app_path cert_base64 cert_name cert_pass note_user note_pass note_team
 do
     if [[ -z "${!var}" ]]
     then
@@ -114,7 +114,7 @@ then
 fi
 trap "rm '$zip_file'" EXIT
 
-credentials=(--apple-id "$note_user" --password "$note_pass" --team-id "$note_asc")
+credentials=(--apple-id "$note_user" --password "$note_pass" --team-id "$note_team")
 
 # Here we send the notarization request to Apple's Notarization service,
 # waiting for the result. This typically takes a few seconds inside a CI
