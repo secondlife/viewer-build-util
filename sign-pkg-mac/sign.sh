@@ -76,7 +76,8 @@ resources="$app_path/Contents/Resources"
 for signee in \
     "$resources"/*.dylib \
     "$resources"/llplugin/*.dylib \
-    "$app_path/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib
+    "$app_path/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib \
+    "$resources"/SLVoice
 do
     signloop --force --timestamp --keychain viewer.keychain \
              --sign "$cert_name" "$signee"
