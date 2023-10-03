@@ -130,14 +130,14 @@ output="$(xcrun notarytool submit "$zip_file" --wait \
           exit ${PIPESTATUS[0]})"
 # Without the final 'exit' above, we'd be checking the rc from 'tee' rather
 # than 'notarytool'.
-if [[ $? -ne 0 ]]
+rc=$?
+set +x
+if [[ "$output" =~ 'id: '(.+$) ]]
 then
-    if [[ "$output" =~ 'id: '(.+$) ]]
-    then
-        xcrun notarytool log "${BASH_REMATCH[1]}" "${credentials[@]}"
-    fi
-    exit 1
+    xcrun notarytool log "${BASH_REMATCH[1]}" "${credentials[@]}"
 fi
+set -x
+[[ $rc -ne 0 ]] && exit $rc
 set -e
 
 # Finally, we need to "attach the staple" to our executable, which will allow
