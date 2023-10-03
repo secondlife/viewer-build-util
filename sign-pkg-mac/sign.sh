@@ -73,7 +73,7 @@ function signloop() {
 
 resources="$app_path/Contents/Resources"
 # plain signing
-for signee in "$resources"/llplugin/*.dylib
+for signee in "$resources"/*.dylib "$resources"/llplugin/*.dylib
 do
     signloop --force --timestamp --keychain viewer.keychain \
              --sign "$cert_name" "$signee"
