@@ -132,11 +132,15 @@ output="$(xcrun notarytool submit "$zip_file" --wait \
 # than 'notarytool'.
 rc=$?
 set +x
-if [[ "$output" =~ 'id: '(.+$) ]]
+[[ "$output" =~ 'id: '([^[:space:]]+) ]]
+match=$?
+set -x
+# Run notarytool log if we find an id: anywhere in the output, regardless of
+# rc: notarytool can terminate with rc 0 even if it fails.
+if [[ $match -eq 0 ]]
 then
     xcrun notarytool log "${BASH_REMATCH[1]}" "${credentials[@]}"
 fi
-set -x
 [[ $rc -ne 0 ]] && exit $rc
 set -e
 
