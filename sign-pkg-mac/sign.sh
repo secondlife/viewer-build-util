@@ -76,8 +76,7 @@ resources="$app_path/Contents/Resources"
 for signee in \
     "$resources"/*.dylib \
     "$resources"/llplugin/*.dylib \
-    "$app_path/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib \
-    "$resources"/SLVoice
+    "$app_path/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib
 do
     signloop --force --timestamp --keychain viewer.keychain \
              --sign "$cert_name" "$signee"
@@ -86,6 +85,7 @@ done
 for signee in \
     "$resources/updater/SLVersionChecker" \
     "$resources/SLPlugin.app/Contents/MacOS/SLPlugin" \
+    "$resources/SLVoice" \
     "$app_path"
 do
     signloop --verbose --deep --force \
