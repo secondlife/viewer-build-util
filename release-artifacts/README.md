@@ -1,10 +1,12 @@
 ## release-artifacts
 
 Given a directory containing artifact subtrees downloaded by (e.g.)
-actions/download-artifact, organize their contents into a single flat
-directory suitable for posting as release assets using (e.g.)
-secondlife-3p/action-gh-release. Resolve filename conflicts by prepending some
-or all of the original subdirectory path.
+[actions/download-artifact](https://github.com/actions/download-artifact),
+organize their contents into a single flat directory suitable for posting as
+release assets using (e.g.)
+[secondlife-3p/action-gh-release](https://github.com/actions/secondlife-3p/action-gh-release).
+Resolve filename conflicts by prepending some or all of the original
+subdirectory path.
 
 This way you need not keep manually updating a list of files to post as
 release assets as you change the contents of the build artifacts.

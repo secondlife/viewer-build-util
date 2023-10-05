@@ -1,6 +1,6 @@
 ## sign-pkg-mac
 
-Retrieve and unpack the macOS-app artifact from the preceding viewer build. Since the artifact contains a tarball (as described in https://github.com/actions/upload-artifact/tree/main#maintaining-file-permissions-and-case-sensitive-files), extract the application bundle. Create a sparseimage and copy the app bundle into it, along with control files to customize the Finder display of the `.dmg` downloaded to a user's computer. Sign executables and notarize the app bundle, then convert to `.dmg` and post as a new artifact.
+Retrieve and unpack the `macOS-app` artifact from the preceding viewer build. Since the artifact contains a tarball (as described in [actions/upload-artifact](https://github.com/actions/upload-artifact/tree/main#maintaining-file-permissions-and-case-sensitive-files)), extract the application bundle. Create a sparseimage and copy the app bundle into it, along with control files to customize the Finder display of the `.dmg` downloaded to a user's computer. Sign executables and notarize the app bundle, then convert to `.dmg` and post as a new artifact.
 
 | Input | Description |
 | ----- | ----------- |

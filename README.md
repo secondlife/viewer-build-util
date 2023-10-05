@@ -1,8 +1,8 @@
 # viewer-build-util
 
 This repository contains distinct composite actions referenced by
-secondlife/viewer. Information about each action is contained in its own
-README.
+[secondlife/viewer](https://github.com/secondlife/viewer). Information about
+each action is contained in its own README.
 
 These are actions are separate from the main viewer repository so that if any
 of these operations fails in a way that requires modifying the action to retry
