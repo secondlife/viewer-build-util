@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""\
-@file   flatten_files.py
-@author Nat Goodspeed
-@date   2023-08-18
-@brief  From an input directory tree, populate a single flat output directory.
-
-$LicenseInfo:firstyear=2023&license=viewerlgpl$
-Copyright (c) 2023, Linden Research, Inc.
-$/LicenseInfo$
 """
+From an input directory tree, populate a single flat output directory.
+"""
+import filecmp
+import os
+import sys
+from collections import defaultdict
+from collections.abc import Iterable
+from pathlib import Path
+
+from pyng.commands import Commands
 
 DESCRIPTION = """\
 From an input directory tree, populate a single flat output directory.
@@ -20,19 +21,13 @@ This is useful when downloading GitHub build artifacts from multiple platforms
 to post them all as release assets without collisions.
 """
 
-from collections import defaultdict
-from collections.abc import Iterable
-from contextlib import suppress
-import filecmp
-import os
-from pathlib import Path
-from pyng.commands import Commands
-import sys
 
 class Error(Exception):
     pass
 
+
 command = Commands(DESCRIPTION)
+
 
 @command
 def flatten(output, input='.', exclude: Iterable=[], prefix: Iterable=[], dry_run=False):
@@ -93,7 +88,7 @@ def flatten(output, input='.', exclude: Iterable=[], prefix: Iterable=[], dry_ru
         # and because we're using indexes, traverse backwards so deletion
         # won't affect subsequent iterations. Yes we really must subtract 1
         # that many times.
-        for idx in range(len(dirs)-1, -1, -1):
+        for idx in range(len(dirs) - 1, -1, -1):
             if dirs[idx].startswith('.'):
                 # skip dot-named directories
                 print(f'ignoring {dirs[idx]}', file=sys.stderr)
@@ -116,8 +111,7 @@ def flatten(output, input='.', exclude: Iterable=[], prefix: Iterable=[], dry_ru
         basenames[f.name].append(f)
 
     # output names: populate it right away with unique basenames
-    outnames = { name: files[0] for name, files in basenames.items()
-                 if len(files) == 1 }
+    outnames = {name: files[0] for name, files in basenames.items() if len(files) == 1}
 
     # now focus on the collisions
     for name, files in basenames.items():
@@ -169,8 +163,7 @@ def flatten(output, input='.', exclude: Iterable=[], prefix: Iterable=[], dry_ru
             # ('parent', 'newview', 'autobuild-package.xml')
             # Since we already know the basename is identical for every f in
             # files, though, we can omit it from our uniqueness testing.
-            trynames = { rel[:min(prefixlen+1, len(rel)-1)]: f
-                         for f, rel in filepairs }
+            trynames = {rel[:min(prefixlen + 1, len(rel) - 1)]: f for f, rel in filepairs}
             if len(trynames) == len(files):
                 # Found a prefix without collisions -- note that we're
                 # guaranteed to get here eventually since the full paths are
@@ -191,10 +184,12 @@ def flatten(output, input='.', exclude: Iterable=[], prefix: Iterable=[], dry_ru
             newname = f.rename(newname)
         print(f'{f} => {newname}')
 
+
 def main(*raw_args):
     parser = command.get_parser()
     args = parser.parse_args(raw_args)
     args.run()
+
 
 if __name__ == "__main__":
     try:

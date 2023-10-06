@@ -10,21 +10,23 @@ Copyright (c) 2023, Linden Research, Inc.
 $/LicenseInfo$
 """
 
-from autobuild.autobuild_tool_source_environment import (
-    load_vsvars, _available_vsvers, SourceEnvError)
-from collections.abc import Iterable
-from datetime import datetime, timedelta
 import os
-from pathlib import Path
-from pyng.commands import Commands
 import re
 import shlex
 import subprocess
 import sys
 import time
+from collections.abc import Iterable
+from datetime import datetime, timedelta
+from pathlib import Path
+
+from autobuild.autobuild_tool_source_environment import SourceEnvError, _available_vsvers, load_vsvars
+from pyng.commands import Commands
+
 
 class Error(Exception):
     pass
+
 
 ExpiresLine = re.compile(
     r"\bExpires:\s+\S{3}\s+(\S{3}) (\d+) \d\d:\d\d:\d\d (\d{4})"
@@ -32,6 +34,7 @@ ExpiresLine = re.compile(
 
 # Make a function decorator that will generate an ArgumentParser
 command = Commands()
+
 
 # Interactively, don't print our int return value
 @command.format(lambda ret: None)
@@ -75,7 +78,7 @@ def sign(executable, *, service: Iterable, certificate,
         VerBinPath = vsvars['WINDOWSSDKVERBINPATH']
     except KeyError:
         from pprint import pprint
-        pprint({ key: value for key, value in vsvars.items() if 'Kits' in value })
+        pprint({key: value for key, value in vsvars.items() if 'Kits' in value})
         raise Error(f"WindowsSdkVerBinPath not set by VS version {vsver}")
 
     signtool = Path(VerBinPath) / 'X64' / 'signtool.exe'

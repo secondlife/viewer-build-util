@@ -1,38 +1,40 @@
 #!/bin/sh
+# shellcheck disable=SC3010,SC1090,SC3060
 if [[ $SKIP_NOTARIZATION == "true" ]]; then
     echo "Skipping notarization"
     exit 0
 fi
 
+# shellcheck disable=SC2154
 CONFIG_FILE="$build_secrets_checkout/code-signing-osx/notarize_creds.sh"
 if [[ -f "$CONFIG_FILE" ]]; then
-    source "$CONFIG_FILE"
+    . "$CONFIG_FILE"
     app_file="$1"
     zip_file=${app_file/app/zip}
     ditto -c -k --keepParent "$app_file" "$zip_file"
     if [[ -f "$zip_file" ]]; then
         res=$(xcrun altool --notarize-app --primary-bundle-id "com.secondlife.viewer" \
-                                   --username $USERNAME \
-                                   --password $PASSWORD \
-                                   --asc-provider $ASC_PROVIDER \
+                                   --username "$USERNAME" \
+                                   --password "$PASSWORD" \
+                                   --asc-provider "$ASC_PROVIDER" \
                                    --file "$zip_file" 2>&1)
-        echo $res
-        
-        requestUUID=$(echo $res | awk '/RequestUUID/ { print $NF; }')
+        echo "$res"
+
+        requestUUID=$(echo "$res" | awk '/RequestUUID/ { print $NF; }')
         if [[ -n $requestUUID ]]; then
             in_progress=1
             while [[ $in_progress -eq 1 ]]; do
                 sleep 30
                 res=$(xcrun altool --notarization-info "$requestUUID" \
-                                            --username $USERNAME \
-                                            --password $PASSWORD 2>&1)
-                if [[ $res != *"in progress"* ]]; then 
+                                            --username "$USERNAME" \
+                                            --password "$PASSWORD" 2>&1)
+                if [[ $res != *"in progress"* ]]; then
                     in_progress=0
                 fi
                 echo "."
             done
             # log results
-            echo $res
+            echo "$res"
 
             #remove temporary file
             rm "$zip_file"
