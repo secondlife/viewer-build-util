@@ -24,7 +24,15 @@ runs:
 
     - name: Install Python dependencies
       shell: bash
-      run: pip install pyng autobuild
+      run: pip install pyng
+
+    - name: Install AzureSignTool
+      shell: bash
+      run: dotnet tool install --global AzureSignTool
+
+    - name: Skip rest of job
+      shell: bash
+      run: false
 
     - name: Sign the executables
       shell: bash
