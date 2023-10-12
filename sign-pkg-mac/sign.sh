@@ -12,6 +12,7 @@
 mydir="$(dirname "$0")"
 app_path="$1"
 
+# shellcheck disable=SC1091
 . "$mydir/retry_loop"
 
 gotall=true
@@ -31,6 +32,7 @@ set -x -e
 # ****************************************************************************
 # The following is derived from
 # https://federicoterzi.com/blog/automatic-code-signing-and-notarization-for-macos-apps-using-github-actions/
+# shellcheck disable=SC2154
 base64 --decode > certificate.p12 <<< "$cert_base64"
 
 # We need to create a new keychain, otherwise using the certificate will prompt
@@ -42,9 +44,10 @@ keychain_pass="$(dd bs=8 count=1 if=/dev/urandom 2>/dev/null | base64)"
 echo "::add-mask::$keychain_pass"
 set -x
 sleep 1
-security create-keychain -p "$keychain_pass" viewer.keychain 
+security create-keychain -p "$keychain_pass" viewer.keychain
 security default-keychain -s viewer.keychain
 security unlock-keychain -p "$keychain_pass" viewer.keychain
+# shellcheck disable=SC2154
 security import certificate.p12 -k viewer.keychain -P "$cert_pass" \
          -T /usr/bin/codesign
 security set-key-partition-list -S 'apple-tool:,apple:,codesign:' -s \
@@ -62,10 +65,12 @@ function signloop() {
     # save +x / -x state and suppress
     xtrace="$(set +o | grep xtrace)"
     set +x
+    # shellcheck disable=SC2064
     trap "$xtrace" RETURN
 
     local exe
     # we pass the executable to sign as the last argument
+    # shellcheck disable=SC1083
     eval exe=\${$#}
     exe="$(basename "$exe")"
     retry_loop "$exe signing" $retries $signwait /usr/bin/codesign "$@"
@@ -78,6 +83,7 @@ for signee in \
     "$resources"/llplugin/*.dylib \
     "$app_path/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib
 do
+    # shellcheck disable=SC2154
     signloop --force --timestamp --keychain viewer.keychain \
              --sign "$cert_name" "$signee"
 done
@@ -116,6 +122,7 @@ then
     echo "Notarization error: ditto failed"
     exit 1
 fi
+# shellcheck disable=SC2154,SC2064
 trap "rm '$zip_file'" EXIT
 
 credentials=(--apple-id "$note_user" --password "$note_pass" --team-id "$note_team")
@@ -131,7 +138,7 @@ set +e
 output="$(xcrun notarytool submit "$zip_file" --wait \
           "${credentials[@]}" 2>&1 | \
           tee /dev/stderr ; \
-          exit ${PIPESTATUS[0]})"
+          exit "${PIPESTATUS[0]}")"
 # Without the final 'exit' above, we'd be checking the rc from 'tee' rather
 # than 'notarytool'.
 rc=$?
