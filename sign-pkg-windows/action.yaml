@@ -3,15 +3,21 @@ description:
   Sign and package the Windows Linden viewer.
 
 inputs:
-  certificate:
-    description: "path to certificate file"
-    type: string
+  vault_uri:
+    description: "Azure key vault URI"
     required: true
-  services:
-    description: "space-separated list of timestamp service URLs"
-    type: string
-    required: false
-    default: "http://timestamp.globalsign.com/scripts/timstamp.dll http://timestamp.comodoca.com/authenticode"
+  cert_name:
+    description: "Name of certificate on Azure"
+    required: true
+  client_id:
+    description: "Azure signer app clientId"
+    required: true
+  client_secret:
+    description: "Azure signer app clientSecret"
+    required: true
+  tenant_id:
+    description: "Azure signer app tenantId"
+    required: true
 
 runs:
   using: composite
@@ -24,7 +30,11 @@ runs:
 
     - name: Install Python dependencies
       shell: bash
-      run: pip install pyng autobuild
+      run: pip install pyng
+
+    - name: Install AzureSignTool
+      shell: bash
+      run: dotnet tool install --global AzureSignTool
 
     - name: Sign the executables
       shell: bash
@@ -34,8 +44,11 @@ runs:
                    .app/llplugin/dullahan_host.exe
         do
             python "${{ github.action_path }}/sign.py" \
-                   --service ${{ inputs.services }} \
-                   --certificate "${{ inputs.certificate }}" \
+                   --vault_uri "${{ inputs.vault_uri }}" \
+                   --cert_name "${{ inputs.cert_name }}" \
+                   --client_id "${{ inputs.client_id }}" \
+                   --client_secret "${{ inputs.client_secret }}" \
+                   --tenant_id "${{ inputs.tenant_id }}" \
                    "$exe"
         done
 
@@ -80,8 +93,11 @@ runs:
         # pass installer to next step
         echo "installer=$installer" >> "$GITHUB_ENV"
         python "${{ github.action_path }}/sign.py" \
-               --service ${{ inputs.services }} \
-               --certificate "${{ inputs.certificate }}" \
+               --vault_uri "${{ inputs.vault_uri }}" \
+               --cert_name "${{ inputs.cert_name }}" \
+               --client_id "${{ inputs.client_id }}" \
+               --client_secret "${{ inputs.client_secret }}" \
+               --tenant_id "${{ inputs.tenant_id }}" \
                "$installer"
 
     - name: Post the installer
