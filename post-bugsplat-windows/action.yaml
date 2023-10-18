@@ -46,7 +46,7 @@ runs:
         tar -xjf secondlife-symbols-windows-64.tar.bz2
 
     - name: Post to BugSplat
-      uses: BugSplat-Git/symbol-upload@v6.2.2
+      uses: BugSplat-Git/symbol-upload@v6.3.2
       with:
         username: "${{ inputs.username }}"
         password: "${{ inputs.password }}"
