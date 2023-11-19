@@ -1,29 +1,18 @@
-#!/usr/bin/env python3
-"""\
-@file   sign.py
-@author Nat Goodspeed
-@date   2023-09-14
-@brief  Sign the designated executable using Microsoft AzureSignTool.
-
-$LicenseInfo:firstyear=2023&license=viewerlgpl$
-Copyright (c) 2023, Linden Research, Inc.
-$/LicenseInfo$
+"""
+Sign the designated executable using Microsoft AzureSignTool.
 """
 
-import os
+import glob
 import re
 import shlex
 import subprocess
 import sys
-import time
-from collections.abc import Iterable
+from argparse import ArgumentParser
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from pyng.commands import Commands
 
-
-class Error(Exception):
+class SignError(Exception):
     pass
 
 
@@ -31,20 +20,15 @@ ExpiresLine = re.compile(
     r"\bExpires:\s+\S{3}\s+(\S{3}) (\d+) \d\d:\d\d:\d\d (\d{4})"
 )  # looking for a date like 'Sep 16 23:59:59 2017'
 
-# Make a function decorator that will generate an ArgumentParser
-command = Commands()
 
-
-# Interactively, don't print our int return value
-@command.format(lambda ret: None)
-def sign(executable, *, vault_uri, cert_name, client_id, client_secret, tenant_id,
+def sign(file, *, vault_uri, cert_name, client_id, client_secret, tenant_id,
          certwarning=14):
     """
-    Sign the designated executable using Microsoft AzureSignTool.
+    Sign the designated files using Microsoft AzureSignTool.
 
     Pass:
 
-    executable:    path to executable to sign
+    files:         path to executable to sign
     vault_uri:     Azure key vault URI
     cert_name:     Name of certificate on Azure
     client_id:     Azure signer app clientId
@@ -52,7 +36,7 @@ def sign(executable, *, vault_uri, cert_name, client_id, client_secret, tenant_i
     tenant_id:     Azure signer app tenantId
     certwarning:   warn if certificate will expire in fewer than this many days
     """
-    name = Path(executable).name
+    name = Path(file).name
 
     command = ['AzureSignTool', 'sign',
                '-kvu', vault_uri,
@@ -60,8 +44,8 @@ def sign(executable, *, vault_uri, cert_name, client_id, client_secret, tenant_i
                '-kvt', tenant_id,
                '-kvs', client_secret,
                '-kvc', cert_name,
-               '-tr',  'http://timestamp.digicert.com',
-               '-v',   executable]
+               '-tr', 'http://timestamp.digicert.com',
+               '-v', file]
     print(name, 'signing:', shlex.join(command))
     done = subprocess.run(command,
                           stdout=subprocess.PIPE,
@@ -70,7 +54,7 @@ def sign(executable, *, vault_uri, cert_name, client_id, client_secret, tenant_i
     print(done.stdout, end='')
     rc = done.returncode
     if rc != 0:
-        raise Error(name + ' signing failed')
+        raise SignError(name + ' signing failed')
 
     print(name, 'signing succeeded')
     # Check the certificate expiration date in the output to warn of imminent expiration
@@ -81,7 +65,7 @@ def sign(executable, *, vault_uri, cert_name, client_id, client_secret, tenant_i
             try:
                 expiration = datetime.strptime(' '.join(found.groups()), '%b %d %Y')
             except ValueError:
-                raise Error('failed to parse expiration from: ' + line)
+                raise SignError('failed to parse expiration from: ' + line)
             else:
                 expires = expiration - datetime.now()
                 print(f'Certificate expires in {expires.days} days')
@@ -89,19 +73,32 @@ def sign(executable, *, vault_uri, cert_name, client_id, client_secret, tenant_i
                     print(f'::warning::Certificate expires in {expires.days} days: {expiration}')
                 break
     else:
-##        raise Error('Failed to find certificate expiration date')
+        # raise Error('Failed to find certificate expiration date')
         print('::warning::Failed to find certificate expiration date')
     return rc
 
 
-def main(*raw_args):
-    parser = command.get_parser()
-    args = parser.parse_args(raw_args)
-    args.run()
+def cli(argv=None):
+    parser = ArgumentParser()
+    parser.add_argument('files', help='CSV or newline separated list of files to sign')
+    parser.add_argument('-v', '--vault-uri', required=True)
+    parser.add_argument('-c', '--cert-name', required=True)
+    parser.add_argument('-i', '--client-id', required=True)
+    parser.add_argument('-s', '--client-secret', required=True)
+    parser.add_argument('-t', '--tenant-id', required=True)
+    parser.add_argument('-w', '--certwarning', type=int, default=14)
+    args = parser.parse_args(argv)
+    files = args.files
+    kwargs = vars(args)
+    kwargs.pop('files')
+    for ln in re.split(r',|\n', files):
+        ln = ln.strip()
+        for f in glob.glob(ln):
+            sign(f, **kwargs)
 
 
-if __name__ == "__main__":
+def main():
     try:
-        sys.exit(main(*sys.argv[1:]))
-    except Error as err:
+        cli()
+    except SignError as err:
         sys.exit(str(err))

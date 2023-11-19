@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  python-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install viewerutil
+        run: pip install .[dev]
+
+      - name: Run python tests
+        run: pytest
+
+  sign-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create test files
+        run: |
+          mkdir testfiles
+          echo 'Write-Host "Hello World"' > "./testfiles/script1.ps1"
+          echo 'Write-Host "Hello World"' > "./testfiles/script 2.ps1"
+
+      - name: Test sign-windows (Multiple files)
+        uses: ./sign-windows
+        with:
+          vault-uri: "${{ secrets.AZURE_KEY_VAULT_URI }}"
+          cert-name: "${{ secrets.AZURE_CERT_NAME }}"
+          client-id: "${{ secrets.AZURE_CLIENT_ID }}"
+          client-secret: "${{ secrets.AZURE_CLIENT_SECRET }}"
+          tenant-id: "${{ secrets.AZURE_TENANT_ID }}"
+          files-to-sign: |
+            ./testfiles/script1.ps1
+            ./testfiles/script 2.ps1
+
+      - name: Test sign-windows (Wildcard)
+        uses: ./sign-windows
+        with:
+          vault-uri: "${{ secrets.AZURE_KEY_VAULT_URI }}"
+          cert-name: "${{ secrets.AZURE_CERT_NAME }}"
+          client-id: "${{ secrets.AZURE_CLIENT_ID }}"
+          client-secret: "${{ secrets.AZURE_CLIENT_SECRET }}"
+          tenant-id: "${{ secrets.AZURE_TENANT_ID }}"
+          files-to-sign: ./testfiles/script*.ps1
