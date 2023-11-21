@@ -1,0 +1,18 @@
+[project]
+name = "viewerutil"
+version = "0.0.1"
+description = "Second Life viewer build utilities for Github actions"
+license = {file = "LICENSE"}
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools]
+py-modules = ['viewerutil']
+
+[project.scripts]
+sign-windows = "viewerutil.sign_windows:main"
+
+[build-system]
+requires = ["setuptools>=43.0.0", "wheel"]
+build-backend = "setuptools.build_meta"

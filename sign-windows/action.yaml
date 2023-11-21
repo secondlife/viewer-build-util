@@ -1,0 +1,45 @@
+name: sign-windows
+description:
+  Sign windows files using AzureSignTool
+
+inputs:
+  files-to-sign:
+    description: "List of files to sign"
+    required: true
+  vault-uri:
+    description: "Azure key vault URI"
+    required: true
+  cert-name:
+    description: "Name of certificate on Azure"
+    required: true
+  client-id:
+    description: "Azure signer app clientId"
+    required: true
+  client-secret:
+    description: "Azure signer app clientSecret"
+    required: true
+  tenant-id:
+    description: "Azure signer app tenantId"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install viewerutil
+      shell: bash
+      run: which sign-windows || pip install -e "$(dirname ${{ github.action_path }})/.."
+
+    - name: Install AzureSignTool
+      shell: bash
+      run: which azuresigntool || dotnet tool install --global AzureSignTool
+
+    - name: Sign files
+      shell: bash
+      run: |
+        sign-windows \
+          --vault-uri "${{ inputs.vault-uri }}" \
+          --cert-name "${{ inputs.cert-name }}" \
+          --client-id "${{ inputs.client-id }}" \
+          --client-secret "${{ inputs.client-secret }}" \
+          --tenant-id "${{ inputs.tenant-id }}" \
+          "${{ inputs.files-to-sign }}"

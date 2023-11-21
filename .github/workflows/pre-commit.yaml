@@ -4,7 +4,6 @@ on:
   pull_request:
   push:
     branches: [main]
-    tags: [v*.*.*]
 
 jobs:
   pre-commit:
@@ -15,3 +14,6 @@ jobs:
         with:
           python-version: '3.11'
       - uses: pre-commit/action@v3.0.0
+        env:
+          # Performed as part of ci.yaml
+          SKIP: pytest
