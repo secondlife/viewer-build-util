@@ -10,13 +10,10 @@ Copyright (c) 2023, Linden Research, Inc.
 $/LicenseInfo$
 """
 
-import os
 import re
 import shlex
 import subprocess
 import sys
-import time
-from collections.abc import Iterable
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -60,8 +57,8 @@ def sign(executable, *, vault_uri, cert_name, client_id, client_secret, tenant_i
                '-kvt', tenant_id,
                '-kvs', client_secret,
                '-kvc', cert_name,
-               '-tr',  'http://timestamp.digicert.com',
-               '-v',   executable]
+               '-tr', 'http://timestamp.digicert.com',
+               '-v', executable]
     print(name, 'signing:', shlex.join(command))
     done = subprocess.run(command,
                           stdout=subprocess.PIPE,
@@ -89,7 +86,7 @@ def sign(executable, *, vault_uri, cert_name, client_id, client_secret, tenant_i
                     print(f'::warning::Certificate expires in {expires.days} days: {expiration}')
                 break
     else:
-##        raise Error('Failed to find certificate expiration date')
+        # raise Error('Failed to find certificate expiration date')
         print('::warning::Failed to find certificate expiration date')
     return rc
 
