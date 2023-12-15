@@ -12,14 +12,15 @@ $/LicenseInfo$
 
 import contextlib
 import re
-import sys
 import subprocess
+import sys
 
 import github
 
 
 class Error(Exception):
     pass
+
 
 def branches_for(token, commit, repo=None):
     """
