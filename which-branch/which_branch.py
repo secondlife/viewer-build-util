@@ -11,10 +11,12 @@ $/LicenseInfo$
 """
 
 import contextlib
-import github
 import re
 import sys
 import subprocess
+
+import github
+
 
 class Error(Exception):
     pass
@@ -50,6 +52,7 @@ def branches_for(token, commit, repo=None):
         if delta.ahead_by == 0 and delta.behind_by == 0:
             yield branch
 
+
 def main(*raw_args):
     from argparse import ArgumentParser
     parser = ArgumentParser(description=
@@ -70,6 +73,7 @@ it's useful to be able to identify which branch that is.
     args = parser.parse_args(raw_args)
     with contextlib.suppress(StopIteration):
         print(next(iter(branches_for(token=args.token, commit=args.commit, repo=args.repo))).name)
+
 
 if __name__ == "__main__":
     try:
