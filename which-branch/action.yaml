@@ -23,6 +23,6 @@ runs:
       id: which-branch
       shell: bash
       run: |
-        branch="$(python ${{ github.action_path }}/which_branch.py \
+        branch="$(python '${{ github.action_path }}/which_branch.py' \
                   -t "${{ inputs.token }}" -r "${{github.repository }}" "${{ github.sha }}")"
         echo "branch=$branch" >> "$GITHUB_OUTPUT"
