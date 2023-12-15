@@ -56,7 +56,7 @@ def branches_for(token, commit, repo=None):
 
 def main(*raw_args):
     from argparse import ArgumentParser
-    parser = ArgumentParser(description=
+    parser = ArgumentParser(description=\
 "%(prog)s reports the branch(es) for which the specified commit hash is the tip.",
                             epilog="""\
 When GitHub Actions launches a tag build, it checks out the specific changeset
