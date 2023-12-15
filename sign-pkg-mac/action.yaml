@@ -117,8 +117,8 @@ runs:
         # Create the alias file (which is a resource file) from the .r
         Rez "$dmg_prefill/Applications-alias.r" -o "$volpath/Applications"
 
-        # Set the alias file's alias and custom icon bits
-        SetFile -a AC "$volpath/Applications"
+        # Set the alias file's alias bit
+        SetFile -a A "$volpath/Applications"
 
         # Set the disk image root's custom icon bit
         SetFile -a C "$volpath"
