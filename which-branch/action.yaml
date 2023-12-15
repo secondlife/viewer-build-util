@@ -1,0 +1,28 @@
+name: which-branch
+description:
+  "Discover and report which repository branch corresponds to `github.repository`'s `github.sha`."
+
+inputs:
+  token:
+    description: "GitHub Personal Access Token with which to query the REST API"
+    required: true
+
+outputs:
+  branch:
+    description: "Branch whose tip is used for this build"
+    value: ${{ steps.which-branch.outputs.branch }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install Python dependencies
+      shell: bash
+      run: pip3 install PyGithub
+
+    - name: Determine which branch
+      id: which-branch
+      shell: bash
+      run: |
+        branch="$(python ${{ github.action_path }}/which_branch.py \
+                  -t "${{ inputs.token }}" -r "${{github.repository }}" "${{ github.sha }}")"
+        echo "branch=$branch" >> "$GITHUB_OUTPUT"
