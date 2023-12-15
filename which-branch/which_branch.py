@@ -56,8 +56,8 @@ def branches_for(token, commit, repo=None):
 
 def main(*raw_args):
     from argparse import ArgumentParser
-    parser = ArgumentParser(description= # noqa: E251
-"%(prog)s reports the branch(es) for which the specified commit hash is the tip.", # noqa: E128
+    parser = ArgumentParser(description=  # noqa: E251
+"%(prog)s reports the branch(es) for which the specified commit hash is the tip.",  # noqa: E128
                             epilog="""\
 When GitHub Actions launches a tag build, it checks out the specific changeset
 identified by the tag, and so 'git branch' reports detached HEAD. But we use
