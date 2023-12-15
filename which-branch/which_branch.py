@@ -69,7 +69,7 @@ it's useful to be able to identify which branch that is.
 
     args = parser.parse_args(raw_args)
     with contextlib.suppress(StopIteration):
-        print(next(iter(branches_for(token=args.token, commit=args.commit, repo=args.repo))))
+        print(next(iter(branches_for(token=args.token, commit=args.commit, repo=args.repo))).name)
 
 if __name__ == "__main__":
     try:
