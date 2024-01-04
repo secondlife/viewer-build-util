@@ -54,11 +54,6 @@ runs:
       id: unpack
       shell: bash
       run: |
-        if [[ "${{ inputs.channel }}" == "${{ inputs.channel_vendor_base }} Release" ]]
-        then app_name="${{ inputs.channel_vendor_base }} Viewer"
-        else app_name="${{ inputs.channel }}"
-        fi
-        echo "app_name=$app_name" >> "$GITHUB_OUTPUT"
         set -x
         mkdir -p ".app"
         tar xjf .tarball/* -C ".app"
@@ -66,7 +61,6 @@ runs:
     - name: Set up the app sparseimage
       shell: bash
       run: |
-        app_name="${{ steps.unpack.outputs.app_name }}"
         set -x -e
         # MBW -- If the mounted volume name changes, it breaks the .DS_Store's
         #  background image and icon positioning. If we really need
@@ -111,8 +105,10 @@ runs:
         done
 
         # don't forget the application itself
-        cp -a ".app/$app_name.app" "$volpath/"
-        echo "app_path=$volpath/$app_name.app" >> "$GITHUB_ENV"
+        artifact_app="$(ls -dt .app/*.app | head -n 1)"
+        cp -a "$artifact_app" "$volpath/"
+        app_name="$(basename "$artifact_app")"
+        echo "app_path=$volpath/$app_name" >> "$GITHUB_ENV"
 
         # Create the alias file (which is a resource file) from the .r
         Rez "$dmg_prefill/Applications-alias.r" -o "$volpath/Applications"
