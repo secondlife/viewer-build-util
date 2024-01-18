@@ -15,10 +15,6 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Install Python dependencies
-      shell: bash
-      run: pip3 install PyGithub
-
     - name: Determine which branch
       id: which-branch
       shell: bash
@@ -31,6 +27,7 @@ runs:
             branch="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
         else
             # For a tag build, have to discover which branch corresponds.
+            pip3 install PyGithub
             branch="$(python '${{ github.action_path }}/which_branch.py' \
                       -t "${{ inputs.token }}" -r "${{github.repository }}" "${{ github.sha }}")"
         fi
