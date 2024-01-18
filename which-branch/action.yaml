@@ -23,6 +23,15 @@ runs:
       id: which-branch
       shell: bash
       run: |
-        branch="$(python '${{ github.action_path }}/which_branch.py' \
-                  -t "${{ inputs.token }}" -r "${{github.repository }}" "${{ github.sha }}")"
+        set -x
+        if [[ "$GITHUB_REF_TYPE" != "tag" ]]
+        then
+            # For a pull request, GITHUB_HEAD_REF is the branch name.
+            # For a branch build, GITHUB_REF_NAME is the branch name.
+            branch="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+        else
+            # For a tag build, have to discover which branch corresponds.
+            branch="$(python '${{ github.action_path }}/which_branch.py' \
+                      -t "${{ inputs.token }}" -r "${{github.repository }}" "${{ github.sha }}")"
+        fi
         echo "branch=$branch" >> "$GITHUB_OUTPUT"
