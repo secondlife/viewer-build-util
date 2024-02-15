@@ -10,7 +10,6 @@ Copyright (c) 2023, Linden Research, Inc.
 $/LicenseInfo$
 """
 
-import contextlib
 import os
 import re
 import subprocess
@@ -61,7 +60,7 @@ it's useful to be able to identify which branch that is.
     parser.add_argument('commit',
                         help="""commit hash at the tip of the sought branch""")
     args = parser.parse_args(raw_args)
-    
+
     # If repo is omitted or None, assume the current directory is a local clone
     # whose 'origin' remote is the GitHub repository of interest.
     if not args.repo:
@@ -113,6 +112,7 @@ it's useful to be able to identify which branch that is.
         '\n',
         'EOF\n'
     ))
+
 
 if __name__ == "__main__":
     try:
