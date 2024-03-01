@@ -11,6 +11,9 @@ outputs:
   branch:
     description: "Branch whose tip is used for this build"
     value: ${{ steps.which-branch.outputs.branch }}
+  relnotes:
+    description: "For a tag build with a PR, PR description after 'relnotes:'"
+    value: ${{ steps.which-branch.outputs.relnotes }}
 
 runs:
   using: composite
@@ -25,10 +28,11 @@ runs:
             # For a pull request, GITHUB_HEAD_REF is the branch name.
             # For a branch build, GITHUB_REF_NAME is the branch name.
             branch="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+            echo "branch=$branch" >> "$GITHUB_OUTPUT"
         else
             # For a tag build, have to discover which branch corresponds.
             pip3 install PyGithub
-            branch="$(python '${{ github.action_path }}/which_branch.py' \
-                      -t "${{ inputs.token }}" -r "${{github.repository }}" "${{ github.sha }}")"
+            # which_branch.py sets output vars in GITHUB_OUTPUT
+            python '${{ github.action_path }}/which_branch.py' \
+                   -t "${{ inputs.token }}" -r "${{github.repository }}" "${{ github.sha }}"
         fi
-        echo "branch=$branch" >> "$GITHUB_OUTPUT"

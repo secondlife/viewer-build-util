@@ -11,4 +11,4 @@ This is necessary for a release action because release actions are driven by a t
 | Output | Description |
 | ------ | ----------- |
 | branch | name of the branch whose tip is `github.sha`, or empty string |
-
+| relnotes | for a tag build, if the branch has a Pull Request, the release notes from the PR description |
