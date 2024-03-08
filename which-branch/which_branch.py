@@ -98,6 +98,8 @@ it's useful to be able to identify which branch that is.
 
     # pr.body is the PR's description. Look for a line embedded in that
     # description containing only 'relnotes:'.
+    if pr.body is None:
+        return
     lines = iter(pr.body.splitlines())
     try:
         next(line for line in lines if line.strip() == 'relnotes:')
