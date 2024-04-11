@@ -29,10 +29,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Install Python dependencies
-      shell: bash
-      run: pip3 install pyng
-
     - name: Flatten artifact files as release assets
       shell: bash
       env:

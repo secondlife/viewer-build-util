@@ -28,10 +28,6 @@ runs:
         name: Windows-app
         path: .app
 
-    - name: Install Python dependencies
-      shell: bash
-      run: pip install pyng
-
     - name: Install AzureSignTool
       shell: bash
       run: dotnet tool install --global AzureSignTool
@@ -44,11 +40,11 @@ runs:
                    .app/llplugin/dullahan_host.exe
         do
             python "${{ github.action_path }}/sign.py" \
-                   --vault_uri "${{ inputs.vault_uri }}" \
-                   --cert_name "${{ inputs.cert_name }}" \
-                   --client_id "${{ inputs.client_id }}" \
-                   --client_secret "${{ inputs.client_secret }}" \
-                   --tenant_id "${{ inputs.tenant_id }}" \
+                   --vault-uri "${{ inputs.vault_uri }}" \
+                   --cert-name "${{ inputs.cert_name }}" \
+                   --client-id "${{ inputs.client_id }}" \
+                   --client-secret "${{ inputs.client_secret }}" \
+                   --tenant-id "${{ inputs.tenant_id }}" \
                    "$exe"
         done
 

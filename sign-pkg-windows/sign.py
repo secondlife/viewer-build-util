@@ -10,14 +10,13 @@ Copyright (c) 2023, Linden Research, Inc.
 $/LicenseInfo$
 """
 
+import argparse
 import re
 import shlex
 import subprocess
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-
-from pyng.commands import Commands
 
 
 class Error(Exception):
@@ -28,26 +27,10 @@ ExpiresLine = re.compile(
     r"\bExpires:\s+\S{3}\s+(\S{3}) (\d+) \d\d:\d\d:\d\d (\d{4})"
 )  # looking for a date like 'Sep 16 23:59:59 2017'
 
-# Make a function decorator that will generate an ArgumentParser
-command = Commands()
-
-
-# Interactively, don't print our int return value
-@command.format(lambda ret: None)
-def sign(executable, *, vault_uri, cert_name, client_id, client_secret, tenant_id,
-         certwarning=14):
+def sign(executable, vault_uri, cert_name, client_id, client_secret, tenant_id,
+         cert_warning=14):
     """
     Sign the designated executable using Microsoft AzureSignTool.
-
-    Pass:
-
-    executable:    path to executable to sign
-    vault_uri:     Azure key vault URI
-    cert_name:     Name of certificate on Azure
-    client_id:     Azure signer app clientId
-    client_secret: Azure signer app clientSecret
-    tenant_id:     Azure signer app tenantId
-    certwarning:   warn if certificate will expire in fewer than this many days
     """
     name = Path(executable).name
 
@@ -59,7 +42,7 @@ def sign(executable, *, vault_uri, cert_name, client_id, client_secret, tenant_i
                '-kvc', cert_name,
                '-tr', 'http://timestamp.digicert.com',
                '-v', executable]
-    print(name, 'signing:', shlex.join(command))
+
     done = subprocess.run(command,
                           stdout=subprocess.PIPE,
                           stderr=subprocess.STDOUT,
@@ -82,7 +65,7 @@ def sign(executable, *, vault_uri, cert_name, client_id, client_secret, tenant_i
             else:
                 expires = expiration - datetime.now()
                 print(f'Certificate expires in {expires.days} days')
-                if expires < timedelta(certwarning):
+                if expires < timedelta(cert_warning):
                     print(f'::warning::Certificate expires in {expires.days} days: {expiration}')
                 break
     else:
@@ -91,14 +74,21 @@ def sign(executable, *, vault_uri, cert_name, client_id, client_secret, tenant_i
     return rc
 
 
-def main(*raw_args):
-    parser = command.get_parser()
-    args = parser.parse_args(raw_args)
-    args.run()
+def main(argv=None):
+    parser = argparse.ArgumentParser(description='Sign the designated executable using Microsoft AzureSignTool.')
+    parser.add_argument('executable', help='path to executable to sign')
+    parser.add_argument('-v', '--vault-uri', required=True, help='Azure key vault URI')
+    parser.add_argument('-c', '--cert-name', required=True, help='Name of certificate on Azure')
+    parser.add_argument('-C', '--client-id', required=True, help='Azure signer app clientId')
+    parser.add_argument('--client-secret', required=True, help='Azure signer app clientSecret')
+    parser.add_argument('-t', '--tenant-id', required=True, help='Azure signer app tenantId')
+    parser.add_argument('--cert-warning', type=int, default=14, help='warn if certificate will expire in fewer than this many days')
+    args = parser.parse_args(argv)
+    sign(**vars(args))
 
 
 if __name__ == "__main__":
     try:
-        sys.exit(main(*sys.argv[1:]))
+        sys.exit(main())
     except Error as err:
         sys.exit(str(err))

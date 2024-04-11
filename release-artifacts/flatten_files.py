@@ -2,14 +2,13 @@
 """
 From an input directory tree, populate a single flat output directory.
 """
+import argparse
 import filecmp
 import os
 import sys
 from collections import defaultdict
 from collections.abc import Iterable
 from pathlib import Path
-
-from pyng.commands import Commands
 
 DESCRIPTION = """\
 From an input directory tree, populate a single flat output directory.
@@ -26,20 +25,9 @@ class Error(Exception):
     pass
 
 
-command = Commands(DESCRIPTION)
-
-
-@command
 def flatten(output, input='.', exclude: Iterable=[], prefix: Iterable=[], dry_run=False):
     """
     From an input directory tree, populate a single flat output directory.
-
-    output:  populate OUTPUT with (possibly renamed) files
-    input:   recursively read files under INPUT tree
-    exclude: ignore specified artifact subdirectory(ies)
-    prefix:  artifact-name=prefix: use 'prefix' instead of 'artifact-name' if
-             needed to resolve filename collisions
-    dry_run: show what would happen without moving files
     """
     try:
         in_stat = os.stat(input)
@@ -185,14 +173,19 @@ def flatten(output, input='.', exclude: Iterable=[], prefix: Iterable=[], dry_ru
         print(f'{f} => {newname}')
 
 
-def main(*raw_args):
-    parser = command.get_parser()
-    args = parser.parse_args(raw_args)
-    args.run()
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=DESCRIPTION)
+    parser.add_argument('output', help='populate OUTPUT with (possibly renamed) files')
+    parser.add_argument('-i', '--input', default='.', help='recursively read files under INPUT tree (default .)')
+    parser.add_argument('-e', '--exclude', nargs="*", action='append', help='ignore specified artifact subdirectory(ies)')
+    parser.add_argument('-p', '--prefix', nargs="*", action='append', help="artifact-name=prefix: use 'prefix' instead of 'artifact-name' if needed to resolve filename collisions (default [])")
+    parser.add_argument('-d', '--dry-run', action='store_true', help='show what would happen without moving files')
+    args = parser.parse_args(argv)
+    flatten(**vars(args))
 
 
 if __name__ == "__main__":
     try:
-        sys.exit(main(*sys.argv[1:]))
+        sys.exit(main())
     except Error as err:
         sys.exit(str(err))
