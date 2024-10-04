@@ -13,7 +13,6 @@ $/LicenseInfo$
 import shlex
 import subprocess
 import sys
-from datetime import datetime, timedelta
 from pathlib import Path
 
 from pyng.commands import Commands
