@@ -78,19 +78,26 @@ function signloop() {
     retry_loop "$exe signing" $retries $signwait /usr/bin/codesign "$@"
 }
 
+# Handle lines with pathnames containing spaces on a dumb bash 3 GH runner.
+function splitlines {
+    local IFS=$'\n'
+    lines=($1)
+}
+
 # plain signing
 # Read files into an array first, in case any pathnames contain spaces.
-readarray -t files <<< "$files"
+splitlines "$files"
+files=("${lines[@]}")
 for signwild in "${files[@]}"
 do
     # We specifically need to allow both embedded spaces (that should NOT be
     # significant to bash) and wildcards (that SHOULD be expanded by bash).
     # That leads to input lines of the form:
     # "Contents/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib
-    # The readarray command above has hopefully preserved our double-quotes;
+    # The splitlines command above has hopefully preserved our double-quotes;
     # now expand wildcards too. First wrap $app_path in an extra layer of quotes.
-    readarray -t signees <<< "$(eval ls "${app_path@Q}/$signwild")"
-    for signee in "${signees[@]}"
+    splitlines "$(eval ls "${app_path@Q}/$signwild")"
+    for signee in "${lines[@]}"
     do
         # shellcheck disable=SC2154
         signloop --force --timestamp --keychain viewer.keychain \
@@ -98,10 +105,10 @@ do
     done
 done
 # deep signing
-readarray -t apps <<< "$apps"
+splitlines "$apps"
 # don't forget the outer umbrella application
-apps+=(.)
-for signee in "${apps[@]}"
+lines+=(.)
+for signee in "${lines[@]}"
 do
     signloop --verbose --deep --force \
              --entitlements "$mydir/installer/slplugin.entitlements" \
