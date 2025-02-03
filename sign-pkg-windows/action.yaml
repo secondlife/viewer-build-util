@@ -46,14 +46,17 @@ runs:
         readarray -t files <<< "${{ inputs.files }}"
         for exe in "${files[@]}"
         do
-            AzureSignTool sign \
-                -kvu "${{ inputs.vault_uri }}" \
-                -kvi "${{ inputs.client_id }}" \
-                -kvt "${{ inputs.tenant_id }}" \
-                -kvs "${{ inputs.client_secret }}" \
-                -kvc "${{ inputs.cert_name }}" \
-                -tr  http://timestamp.digicert.com \
-                -v   ".app/$exe"
+            if [[ -n "$exe" ]]
+            then
+                AzureSignTool sign \
+                    -kvu "${{ inputs.vault_uri }}" \
+                    -kvi "${{ inputs.client_id }}" \
+                    -kvt "${{ inputs.tenant_id }}" \
+                    -kvs "${{ inputs.client_secret }}" \
+                    -kvc "${{ inputs.cert_name }}" \
+                    -tr  http://timestamp.digicert.com \
+                    -v   ".app/$exe"
+            fi
         done
 
     - name: Build the installer
