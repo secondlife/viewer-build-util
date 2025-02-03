@@ -8,6 +8,8 @@
 # note_user: notarization username
 # note_pass: password for note_user
 # note_team: Team ID for note_user
+# apps:      newline-separated relative pathnames of embedded applications
+# files:     newline-separated relative pathnames of embedded executables/dylibs
 
 mydir="$(dirname "$0")"
 app_path="$1"
@@ -16,7 +18,7 @@ app_path="$1"
 . "$mydir/retry_loop"
 
 gotall=true
-for var in app_path cert_base64 cert_name cert_pass note_user note_pass note_team
+for var in app_path cert_base64 cert_name cert_pass note_user note_pass note_team apps files
 do
     if [[ -z "${!var}" ]]
     then
@@ -76,28 +78,35 @@ function signloop() {
     retry_loop "$exe signing" $retries $signwait /usr/bin/codesign "$@"
 }
 
-resources="$app_path/Contents/Resources"
 # plain signing
-for signee in \
-    "$resources"/*.dylib \
-    "$resources"/llplugin/*.dylib \
-    "$app_path/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib
+# Read files into an array first, in case any pathnames contain spaces.
+readarray -t files <<< "$files"
+for signwild in "${files[@]}"
 do
-    # shellcheck disable=SC2154
-    signloop --force --timestamp --keychain viewer.keychain \
-             --sign "$cert_name" "$signee"
+    # We specifically need to allow both embedded spaces (that should NOT be
+    # significant to bash) and wildcards (that SHOULD be expanded by bash).
+    # That leads to input lines of the form:
+    # "Contents/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib
+    # The readarray command above has hopefully preserved our double-quotes;
+    # now expand wildcards too. First wrap $app_path in an extra layer of quotes.
+    readarray -t signees <<< "$(eval ls "${app_path@Q}/$signwild")"
+    for signee in "${signees[@]}"
+    do
+        # shellcheck disable=SC2154
+        signloop --force --timestamp --keychain viewer.keychain \
+                 --sign "$cert_name" "$signee"
+    done
 done
 # deep signing
-for signee in \
-    "$resources/updater/SLVersionChecker" \
-    "$resources/SLPlugin.app/Contents/MacOS/SLPlugin" \
-    "$resources/SLVoice" \
-    "$app_path"
+readarray -t apps <<< "$apps"
+# don't forget the outer umbrella application
+apps+=(.)
+for signee in "${apps[@]}"
 do
     signloop --verbose --deep --force \
              --entitlements "$mydir/installer/slplugin.entitlements" \
              --options runtime --keychain viewer.keychain \
-             --sign "$cert_name" "$signee"
+             --sign "$cert_name" "$app_path/$signee"
 done
 
 spctl -a -texec -vvvv "$app_path"

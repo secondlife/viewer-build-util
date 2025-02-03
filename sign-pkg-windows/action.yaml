@@ -18,6 +18,13 @@ inputs:
   tenant_id:
     description: "Azure signer app tenantId"
     required: true
+  files:
+    description: "Newline-separated list of executables to sign"
+    required: false
+    default: |
+      SecondLifeViewer.exe
+      SLVersionChecker.exe
+      llplugin/dullahan_host.exe
 
 runs:
   using: composite
@@ -28,10 +35,6 @@ runs:
         name: Windows-app
         path: .app
 
-    - name: Install Python dependencies
-      shell: bash
-      run: pip install pyng
-
     - name: Install AzureSignTool
       shell: bash
       run: dotnet tool install --global AzureSignTool
@@ -39,17 +42,18 @@ runs:
     - name: Sign the executables
       shell: bash
       run: |
-        for exe in .app/SecondLifeViewer.exe \
-                   .app/SLVersionChecker.exe \
-                   .app/llplugin/dullahan_host.exe
+        # Read files into an array first, in case any pathnames contain spaces.
+        readarray -t files <<< "${{ inputs.files }}"
+        for exe in "${files[@]}"
         do
-            python "${{ github.action_path }}/sign.py" \
-                   --vault_uri "${{ inputs.vault_uri }}" \
-                   --cert_name "${{ inputs.cert_name }}" \
-                   --client_id "${{ inputs.client_id }}" \
-                   --client_secret "${{ inputs.client_secret }}" \
-                   --tenant_id "${{ inputs.tenant_id }}" \
-                   "$exe"
+            AzureSignTool sign \
+                -kvu "${{ inputs.vault_uri }}" \
+                -kvi "${{ inputs.client_id }}" \
+                -kvt "${{ inputs.tenant_id }}" \
+                -kvs "${{ inputs.client_secret }}" \
+                -kvc "${{ inputs.cert_name }}" \
+                -tr  http://timestamp.digicert.com \
+                -v   ".app/$exe"
         done
 
     - name: Build the installer

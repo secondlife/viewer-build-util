@@ -35,6 +35,20 @@ inputs:
     description: "Team ID for note_user"
     type: string
     required: true
+  apps:
+    description: "Newline-separated list of embedded applications"
+    required: false
+    default: |
+      Contents/Resources/updater/SLVersionChecker
+      Contents/Resources/SLPlugin.app/Contents/MacOS/SLPlugin
+      Contents/Resources/SLVoice
+  files:
+    description: "Newline-separated list of embedded executables/dylibs"
+    required: false
+    default: |
+      "Contents/Resources"/*.dylib
+      "Contents/Resources/llplugin"/*.dylib
+      "Contents/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib
   channel_vendor_base:
     description: "setting for all steps"
     type: string
@@ -128,6 +142,8 @@ runs:
         note_user: "${{ inputs.note_user }}"
         note_pass: "${{ inputs.note_pass }}"
         note_team: "${{ inputs.note_team }}"
+        apps:      "${{ inputs.apps }}"
+        files:     "${{ inputs.files }}"
       run: |
         # Sign the app; do this in the copy that's in the .dmg so that the
         # extended attributes used by the signature are preserved; moving the
@@ -176,4 +192,3 @@ runs:
       with:
         name: "macOS-installer"
         path: ${{ env.installer }}
-
