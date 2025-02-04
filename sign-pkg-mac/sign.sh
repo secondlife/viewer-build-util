@@ -78,6 +78,13 @@ function signloop() {
     retry_loop "$exe signing" $retries $signwait /usr/bin/codesign "$@"
 }
 
+# Handle lines with pathnames containing spaces on a dumb bash 3 GH runner
+# (which predates readarray command).
+function splitlines {
+    local IFS=$'\n'
+    lines=($1)
+}
+
 pushd "$app_path"
 # plain signing
 # We specifically need to allow both embedded spaces (that should NOT be
@@ -85,7 +92,11 @@ pushd "$app_path"
 # leads to input lines of the form:
 # "Contents/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib
 # Use eval to rescan, and ls to expand each of them.
-for signee in $(eval ls -d "$files")
+# Then the tricky part is reading wildcard-expanded pathnames from ls output
+# properly even when they contain spaces. Force ls to write one pathname per
+# line, and split the result on newlines.
+splitlines "$(eval ls -1d "$files")"
+for signee in "${lines[@]}"
 do
     # shellcheck disable=SC2154
     signloop --force --timestamp --keychain viewer.keychain \
