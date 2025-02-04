@@ -42,6 +42,7 @@ runs:
     - name: Sign the executables
       shell: bash
       run: |
+        set -x
         for exe in ${{ inputs.files }}
         do
             AzureSignTool sign \
