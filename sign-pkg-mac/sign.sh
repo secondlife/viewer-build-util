@@ -88,6 +88,8 @@ function splitlines {
 # Read files into an array first, in case any pathnames contain spaces.
 splitlines "$files"
 files=("${lines[@]}")
+# Wrap $app_path in an extra layer of quotes.
+qapp_path="$(printf '%q' "$app_path")"
 for signwild in "${files[@]}"
 do
     # We specifically need to allow both embedded spaces (that should NOT be
@@ -95,8 +97,8 @@ do
     # That leads to input lines of the form:
     # "Contents/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib
     # The splitlines command above has hopefully preserved our double-quotes;
-    # now expand wildcards too. First wrap $app_path in an extra layer of quotes.
-    splitlines "$(eval ls "${app_path@Q}/$signwild")"
+    # now expand wildcards too.
+    splitlines "$(eval ls "$qapp_path/$signwild")"
     for signee in "${lines[@]}"
     do
         # shellcheck disable=SC2154
