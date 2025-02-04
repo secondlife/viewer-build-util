@@ -80,7 +80,12 @@ function signloop() {
 
 pushd "$app_path"
 # plain signing
-for signee in "${files[@]}"
+# We specifically need to allow both embedded spaces (that should NOT be
+# significant to bash) and wildcards (that SHOULD be expanded by bash). That
+# leads to input lines of the form:
+# "Contents/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib
+# Use eval to rescan, and ls to expand each of them.
+for signee in $(eval ls -d "$files")
 do
     # shellcheck disable=SC2154
     signloop --force --timestamp --keychain viewer.keychain \
@@ -88,7 +93,7 @@ do
 done
 # deep signing
 # don't forget the outer umbrella application
-for signee in "${apps[@]}" .
+for signee in $apps .
 do
     signloop --verbose --deep --force \
              --entitlements "$mydir/installer/slplugin.entitlements" \
