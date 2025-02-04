@@ -42,21 +42,16 @@ runs:
     - name: Sign the executables
       shell: bash
       run: |
-        # Read files into an array first, in case any pathnames contain spaces.
-        readarray -t files <<< "${{ inputs.files }}"
-        for exe in "${files[@]}"
+        for exe in ${{ inputs.files }}
         do
-            if [[ -n "$exe" ]]
-            then
-                AzureSignTool sign \
-                    -kvu "${{ inputs.vault_uri }}" \
-                    -kvi "${{ inputs.client_id }}" \
-                    -kvt "${{ inputs.tenant_id }}" \
-                    -kvs "${{ inputs.client_secret }}" \
-                    -kvc "${{ inputs.cert_name }}" \
-                    -tr  http://timestamp.digicert.com \
-                    -v   ".app/$exe"
-            fi
+            AzureSignTool sign \
+                -kvu "${{ inputs.vault_uri }}" \
+                -kvi "${{ inputs.client_id }}" \
+                -kvt "${{ inputs.tenant_id }}" \
+                -kvs "${{ inputs.client_secret }}" \
+                -kvc "${{ inputs.cert_name }}" \
+                -tr  http://timestamp.digicert.com \
+                -v   ".app/$exe"
         done
 
     - name: Build the installer
