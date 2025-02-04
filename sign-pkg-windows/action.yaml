@@ -41,9 +41,11 @@ runs:
 
     - name: Sign the executables
       shell: bash
+      env:
+        FILES: ${{ inputs.files }}
       run: |
         set -x
-        for exe in ${{ inputs.files }}
+        for exe in $FILES
         do
             AzureSignTool sign \
                 -kvu "${{ inputs.vault_uri }}" \
