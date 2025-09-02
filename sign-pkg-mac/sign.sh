@@ -72,6 +72,14 @@ function signloop() {
     # we pass the executable to sign as the last argument
     # shellcheck disable=SC1083
     eval exe=\${$#}
+
+    # If the file does not exist, skip signing it
+    # llplugin and slvoice might be not present
+    if [[ ! -e "$exe" ]]; then
+        echo "signloop: file '$exe' does not exist, skipping." >&2
+        return 0
+    fi
+
     exe="$(basename "$exe")"
     retry_loop "$exe signing" $retries $signwait /usr/bin/codesign "$@"
 }
@@ -81,6 +89,7 @@ resources="$app_path/Contents/Resources"
 for signee in \
     "$resources"/*.dylib \
     "$resources"/llplugin/*.dylib \
+    "$resources/SLPlugin.app/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib \
     "$app_path/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib
 do
     # shellcheck disable=SC2154
