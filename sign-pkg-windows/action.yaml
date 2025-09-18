@@ -30,9 +30,11 @@ runs:
       # Install NSIS if not already installed on the runner
       # See https://nsis.sourceforge.io/Download
       shell: pwsh
+      env:
+        NSIS_VERSION: ${{ inputs.nsis_version }}
       run: |
         $ErrorActionPreference = 'Stop'
-        $version = '${{ inputs.nsis_version }}'
+        $version = $env:NSIS_VERSION
         $existing = (Get-Command makensis.exe -ErrorAction SilentlyContinue)
         if ($existing) {
           Write-Host "Found existing makensis at $($existing.Source) - skipping download"
