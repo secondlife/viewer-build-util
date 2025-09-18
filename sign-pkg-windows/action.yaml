@@ -18,10 +18,48 @@ inputs:
   tenant_id:
     description: "Azure signer app tenantId"
     required: true
+  nsis_version:
+    description: "NSIS version to install if not already present"
+    default: '3.10'
+    required: true
 
 runs:
   using: composite
   steps:
+    - name: Setup NSIS
+      # Install NSIS if not already installed on the runner
+      # See https://nsis.sourceforge.io/Download
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $version = '${{ inputs.nsis_version }}'
+        $existing = (Get-Command makensis.exe -ErrorAction SilentlyContinue)
+        if ($existing) {
+          Write-Host "Found existing makensis at $($existing.Source) - skipping download"
+          & $existing.Source -VERSION
+          return
+        }
+        $zipName = "nsis-$version.zip"
+        $url = "https://downloads.sourceforge.net/project/nsis/NSIS%203/$version/$zipName"
+        $zipPath = Join-Path $env:RUNNER_TEMP $zipName
+        Write-Host "Downloading NSIS $version from $url"
+        try {
+          $curlProcess = Start-Process -FilePath "curl.exe" -ArgumentList "-L", "-o", "`"$zipPath`"", "`"$url`"" -NoNewWindow -Wait -PassThru
+          if ($curlProcess.ExitCode -ne 0) { throw "curl exited with code $($curlProcess.ExitCode)" }
+        } catch {
+          Write-Error "Download failed with curl: $($_.Exception.Message)"
+          throw
+        }
+        $dest = Join-Path $env:RUNNER_TEMP "nsis-unpacked"
+        if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
+        Expand-Archive -Path $zipPath -DestinationPath $dest
+        $makensis = Get-ChildItem -Path $dest -Recurse -Filter makensis.exe | Select-Object -First 1
+        if (-not $makensis) { throw 'makensis.exe not found in extracted archive' }
+        $binDir = Split-Path $makensis.FullName
+        Add-Content -Path $env:GITHUB_PATH -Value $binDir
+        Write-Host "NSIS added to PATH: $binDir"
+        & $makensis.FullName -VERSION
+
     - name: Fetch Windows app
       uses: actions/download-artifact@v4
       with:
@@ -56,7 +94,6 @@ runs:
       id: nsis
       shell: python
       run: |
-        # Logic derived from viewer_manifest.py - still needed though?
         # Use Python because bash refuses to expand "${programfiles(x86)}" --
         # even though that's really the name of the Windows environment
         # variable.
@@ -64,15 +101,22 @@ runs:
         import shlex
         from shutil import which
         import subprocess
-        nsis_path = which(
-            "makensis",
-            path=os.pathsep.join(
-                os.path.join(program_files, subpath)
-                for program_files in
-                (os.getenv(var) for var in ('programfiles', 'programfiles(x86)'))
-                for subpath in ('NSIS', r'NSIS\Unicode')
-                if program_files))
-        assert nsis_path
+
+        # First try to find makensis in PATH (for installed NSIS)
+        nsis_path = which("makensis")
+
+        # If not found in PATH, try the old Program Files locations (fallback)
+        if not nsis_path:
+            nsis_path = which(
+                "makensis",
+                path=os.pathsep.join(
+                    os.path.join(program_files, subpath)
+                    for program_files in
+                    (os.getenv(var) for var in ('programfiles', 'programfiles(x86)'))
+                    for subpath in ('NSIS', r'NSIS\Unicode')
+                    if program_files))
+
+        assert nsis_path, "makensis not found in PATH or standard NSIS installation directories"
 
         # This .nsi file was prepared by viewer_manifest.py (by substituting
         # values into a template .nsi file) and bundled into the top level of
