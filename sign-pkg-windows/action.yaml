@@ -18,6 +18,10 @@ inputs:
   tenant_id:
     description: "Azure signer app tenantId"
     required: true
+  installer_type:
+    description: "Installer type: 'velopack' (default) or 'nsis'"
+    default: 'velopack'
+    required: false
   nsis_version:
     description: "NSIS version to install if not already present"
     default: '3.10'
@@ -27,6 +31,7 @@ runs:
   using: composite
   steps:
     - name: Setup NSIS
+      if: ${{ inputs.installer_type != 'velopack' }}
       # Install NSIS if not already installed on the runner
       # See https://nsis.sourceforge.io/Download
       shell: pwsh
@@ -92,7 +97,11 @@ runs:
                    "$exe"
         done
 
+    # Velopack packaging is now handled by viewer_manifest.py during the build step
+    # The installer should already exist in the artifact when USE_VELOPACK=ON
+
     - name: Build the installer
+      if: ${{ inputs.installer_type != 'velopack' }}
       id: nsis
       shell: python
       run: |
@@ -128,14 +137,15 @@ runs:
         subprocess.check_call(command, cwd='.app')
 
     - name: Dump NSIS input file
-      if: ${{ failure() && steps.nsis.conclusion == 'failure' }}
+      if: ${{ failure() && steps.nsis.conclusion == 'failure' && inputs.installer_type != 'velopack' }}
       shell: bash
       run: cat '.app/secondlife_setup_tmp.nsi'
 
     - name: Sign the installer
       shell: bash
       run: |
-        installer="$(ls -t .app/*_Setup.exe | head -n 1)"
+        # Match both NSIS (*_Setup.exe) and Velopack (*-Setup.exe) output patterns
+        installer="$(ls -t .app/*Setup.exe | head -n 1)"
         # pass installer to next step
         echo "installer=$installer" >> "$GITHUB_ENV"
         python "${{ github.action_path }}/sign.py" \
