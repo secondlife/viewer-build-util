@@ -85,7 +85,6 @@ runs:
       shell: bash
       run: |
         for exe in .app/SecondLifeViewer.exe \
-                   .app/SLVersionChecker.exe \
                    .app/llplugin/dullahan_host.exe
         do
             python "${{ github.action_path }}/sign.py" \
