@@ -40,6 +40,21 @@ inputs:
     type: string
     required: false
     default: "Second Life"
+  velopack_pack_id:
+    description: "Velopack pack ID (from build step)"
+    required: false
+  velopack_pack_version:
+    description: "Velopack pack version (from build step)"
+    required: false
+  velopack_pack_title:
+    description: "Velopack pack title (from build step)"
+    required: false
+  velopack_main_exe:
+    description: "Velopack main executable name (from build step)"
+    required: false
+  velopack_bundle_id:
+    description: "Velopack bundle ID (from build step)"
+    required: false
 
 runs:
   using: composite
@@ -177,3 +192,46 @@ runs:
         name: "macOS-installer"
         path: ${{ env.installer }}
 
+    # Velopack packaging — runs after signing so the signed app bundle is packaged
+    - name: Setup .NET for Velopack
+      if: ${{ inputs.velopack_pack_id }}
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+
+    - name: Install Velopack CLI
+      if: ${{ inputs.velopack_pack_id }}
+      shell: bash
+      run: dotnet tool install -g vpk
+
+    - name: Build Velopack package
+      if: ${{ inputs.velopack_pack_id }}
+      shell: bash
+      env:
+        PACK_ID: ${{ inputs.velopack_pack_id }}
+        PACK_VERSION: ${{ inputs.velopack_pack_version }}
+        PACK_TITLE: ${{ inputs.velopack_pack_title }}
+        MAIN_EXE: ${{ inputs.velopack_main_exe }}
+        BUNDLE_ID: ${{ inputs.velopack_bundle_id }}
+      run: |
+        set -x
+        # The signed app bundle is in .app/ from the unpack step
+        app_bundle="$(ls -dt .app/*.app | head -n 1)"
+
+        vpk pack \
+          --packId "$PACK_ID" \
+          --packVersion "$PACK_VERSION" \
+          --packDir "$app_bundle" \
+          --packTitle "$PACK_TITLE" \
+          --mainExe "$MAIN_EXE" \
+          --bundleId "$BUNDLE_ID" \
+          --outputDir Releases \
+          --noInst \
+          --verbose
+
+    - name: Upload Velopack releases
+      if: ${{ inputs.velopack_pack_id }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: "macOS-releases"
+        path: Releases/
