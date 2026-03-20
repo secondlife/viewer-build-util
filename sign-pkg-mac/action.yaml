@@ -73,12 +73,52 @@ runs:
         mkdir -p ".app"
         tar xJf .tarball/* -C ".app"
 
-    # Velopack packaging — run BEFORE signing so that UpdateMac and sq.version
-    # are injected into the app bundle. The signed DMG will then contain a
-    # Velopack-ready app bundle that can self-update from day one.
+    # Velopack packaging — vpk pack handles signing, notarization, and
+    # injection of UpdateMac + sq.version into the app bundle.
     - name: Setup Velopack CLI
       if: ${{ inputs.velopack_pack_id }}
       uses: secondlife/viewer-build-util/setup-velopack@geenz/velopack
+
+    - name: Set up signing keychain
+      if: ${{ inputs.velopack_pack_id }}
+      shell: bash
+      env:
+        cert_base64: "${{ inputs.cert_base64 }}"
+        cert_pass: "${{ inputs.cert_pass }}"
+      run: |
+        set -x -e
+        # Decode the signing certificate
+        base64 --decode > certificate.p12 <<< "$cert_base64"
+
+        # Create a temporary keychain for headless CI signing
+        set +x
+        keychain_pass="$(dd bs=8 count=1 if=/dev/urandom 2>/dev/null | base64)"
+        echo "::add-mask::$keychain_pass"
+        set -x
+        sleep 1
+        security create-keychain -p "$keychain_pass" viewer.keychain
+        security default-keychain -s viewer.keychain
+        security unlock-keychain -p "$keychain_pass" viewer.keychain
+        security import certificate.p12 -k viewer.keychain -P "$cert_pass" \
+                 -T /usr/bin/codesign
+        security set-key-partition-list -S 'apple-tool:,apple:,codesign:' -s \
+                 -k "$keychain_pass" viewer.keychain
+        rm certificate.p12
+
+    - name: Store notarytool credentials
+      if: ${{ inputs.velopack_pack_id }}
+      shell: bash
+      env:
+        note_user: "${{ inputs.note_user }}"
+        note_pass: "${{ inputs.note_pass }}"
+        note_team: "${{ inputs.note_team }}"
+      run: |
+        set -x -e
+        xcrun notarytool store-credentials "velopack-notary" \
+          --apple-id "$note_user" \
+          --password "$note_pass" \
+          --team-id "$note_team" \
+          --keychain viewer.keychain
 
     - name: Build Velopack package
       if: ${{ inputs.velopack_pack_id }}
@@ -89,13 +129,15 @@ runs:
         PACK_TITLE: ${{ inputs.velopack_pack_title }}
         MAIN_EXE: ${{ inputs.velopack_main_exe }}
         BUNDLE_ID: ${{ inputs.velopack_bundle_id }}
+        CERT_NAME: "${{ inputs.cert_name }}"
       run: |
         set -x
         # The app bundle from the build step
         app_bundle="$(ls -dt .app/*.app | head -n 1)"
 
-        # Run vpk pack — this injects UpdateMac and sq.version into the bundle,
-        # then produces the nupkg and Portable.zip from it.
+        # Run vpk pack — signs everything (--deep by default), notarizes,
+        # injects UpdateMac and sq.version, then produces the nupkg and
+        # Portable.zip from it.
         vpk pack \
           --packId "$PACK_ID" \
           --packVersion "$PACK_VERSION" \
@@ -105,7 +147,10 @@ runs:
           --bundleId "$BUNDLE_ID" \
           --outputDir Releases \
           --noInst \
-          --verbose
+          --verbose \
+          --signAppIdentity "$CERT_NAME" \
+          --notaryProfile "velopack-notary" \
+          --keychain "viewer.keychain"
 
     - name: Replace app bundle with Velopack-ready version
       if: ${{ inputs.velopack_pack_id }}
@@ -203,21 +248,6 @@ runs:
 
         # Set the disk image root's custom icon bit
         SetFile -a C "$volpath"
-
-    - name: Sign and notarize the app
-      shell: bash
-      env:
-        cert_base64: "${{ inputs.cert_base64 }}"
-        cert_name: "${{ inputs.cert_name }}"
-        cert_pass: "${{ inputs.cert_pass }}"
-        note_user: "${{ inputs.note_user }}"
-        note_pass: "${{ inputs.note_pass }}"
-        note_team: "${{ inputs.note_team }}"
-      run: |
-        # Sign the app; do this in the copy that's in the .dmg so that the
-        # extended attributes used by the signature are preserved; moving the
-        # files would leave them behind and invalidate the signatures.
-        "${{ github.action_path }}/sign.sh" "${{ env.app_path }}"
 
     - name: Unmount the sparseimage
       # unmount even if the above fails
