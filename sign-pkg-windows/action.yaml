@@ -47,6 +47,9 @@ inputs:
   velopack_installer_base:
     description: "Base name for installer output files (from build step)"
     required: false
+  setup_exe_url:
+    description: "URL to patched setup.exe for legacy launcher compatibility"
+    required: false
 
 runs:
   using: composite
@@ -98,6 +101,11 @@ runs:
       shell: bash
       run: pip install pyng
 
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+
     - name: Install AzureSignTool
       shell: bash
       run: dotnet tool install --global AzureSignTool
@@ -118,16 +126,11 @@ runs:
                    "$exe"
         done
 
-    - name: Setup .NET for Velopack
+    - name: Setup Velopack CLI
       if: ${{ inputs.installer_type == 'velopack' }}
-      uses: actions/setup-dotnet@v4
+      uses: secondlife/viewer-build-util/setup-velopack@geenz/velopack
       with:
-        dotnet-version: '9.0.x'
-
-    - name: Install Velopack CLI
-      if: ${{ inputs.installer_type == 'velopack' }}
-      shell: bash
-      run: dotnet tool install -g vpk
+        setup_exe_url: ${{ inputs.setup_exe_url }}
 
     - name: Build and sign Velopack package
       if: ${{ inputs.installer_type == 'velopack' }}

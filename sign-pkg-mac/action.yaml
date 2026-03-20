@@ -73,6 +73,76 @@ runs:
         mkdir -p ".app"
         tar xJf .tarball/* -C ".app"
 
+    # Velopack packaging — run BEFORE signing so that UpdateMac and sq.version
+    # are injected into the app bundle. The signed DMG will then contain a
+    # Velopack-ready app bundle that can self-update from day one.
+    - name: Setup Velopack CLI
+      if: ${{ inputs.velopack_pack_id }}
+      uses: secondlife/viewer-build-util/setup-velopack@geenz/velopack
+
+    - name: Build Velopack package
+      if: ${{ inputs.velopack_pack_id }}
+      shell: bash
+      env:
+        PACK_ID: ${{ inputs.velopack_pack_id }}
+        PACK_VERSION: ${{ inputs.velopack_pack_version }}
+        PACK_TITLE: ${{ inputs.velopack_pack_title }}
+        MAIN_EXE: ${{ inputs.velopack_main_exe }}
+        BUNDLE_ID: ${{ inputs.velopack_bundle_id }}
+      run: |
+        set -x
+        # The app bundle from the build step
+        app_bundle="$(ls -dt .app/*.app | head -n 1)"
+
+        # Run vpk pack — this injects UpdateMac and sq.version into the bundle,
+        # then produces the nupkg and Portable.zip from it.
+        vpk pack \
+          --packId "$PACK_ID" \
+          --packVersion "$PACK_VERSION" \
+          --packDir "$app_bundle" \
+          --packTitle "$PACK_TITLE" \
+          --mainExe "$MAIN_EXE" \
+          --bundleId "$BUNDLE_ID" \
+          --outputDir Releases \
+          --noInst \
+          --verbose
+
+    - name: Replace app bundle with Velopack-ready version
+      if: ${{ inputs.velopack_pack_id }}
+      shell: bash
+      env:
+        PACK_ID: ${{ inputs.velopack_pack_id }}
+        PACK_TITLE: ${{ inputs.velopack_pack_title }}
+      run: |
+        set -x
+        # The Portable.zip contains the app bundle with UpdateMac and sq.version
+        # already injected by vpk pack. Extract it and use it for the DMG.
+        portable_zip="$(ls Releases/*-Portable.zip | head -n 1)"
+        if [[ -z "$portable_zip" ]]; then
+          echo "::error::No Portable.zip found in Releases/"
+          exit 1
+        fi
+
+        # Remove the original app bundle and extract the Velopack-ready one
+        rm -rf .app/*.app
+        # ditto preserves macOS metadata, resource forks, and symlinks
+        ditto -xk "$portable_zip" .app/
+
+        # Verify we got an app bundle
+        new_app="$(ls -dt .app/*.app | head -n 1)"
+        if [[ -z "$new_app" ]]; then
+          echo "::error::No .app bundle found after extracting Portable.zip"
+          exit 1
+        fi
+
+        echo "Using Velopack-ready app bundle: $new_app"
+        # Verify UpdateMac is present
+        if [[ -f "$new_app/Contents/MacOS/UpdateMac" ]]; then
+          echo "UpdateMac binary present"
+        else
+          echo "::warning::UpdateMac binary not found in extracted bundle"
+        fi
+
     - name: Set up the app sparseimage
       shell: bash
       run: |
@@ -191,43 +261,6 @@ runs:
       with:
         name: "macOS-installer"
         path: ${{ env.installer }}
-
-    # Velopack packaging — runs after signing so the signed app bundle is packaged
-    - name: Setup .NET for Velopack
-      if: ${{ inputs.velopack_pack_id }}
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '9.0.x'
-
-    - name: Install Velopack CLI
-      if: ${{ inputs.velopack_pack_id }}
-      shell: bash
-      run: dotnet tool install -g vpk
-
-    - name: Build Velopack package
-      if: ${{ inputs.velopack_pack_id }}
-      shell: bash
-      env:
-        PACK_ID: ${{ inputs.velopack_pack_id }}
-        PACK_VERSION: ${{ inputs.velopack_pack_version }}
-        PACK_TITLE: ${{ inputs.velopack_pack_title }}
-        MAIN_EXE: ${{ inputs.velopack_main_exe }}
-        BUNDLE_ID: ${{ inputs.velopack_bundle_id }}
-      run: |
-        set -x
-        # The signed app bundle is in .app/ from the unpack step
-        app_bundle="$(ls -dt .app/*.app | head -n 1)"
-
-        vpk pack \
-          --packId "$PACK_ID" \
-          --packVersion "$PACK_VERSION" \
-          --packDir "$app_bundle" \
-          --packTitle "$PACK_TITLE" \
-          --mainExe "$MAIN_EXE" \
-          --bundleId "$BUNDLE_ID" \
-          --outputDir Releases \
-          --noInst \
-          --verbose
 
     - name: Upload Velopack releases
       if: ${{ inputs.velopack_pack_id }}
