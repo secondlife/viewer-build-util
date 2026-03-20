@@ -110,40 +110,39 @@ runs:
           # Extract bin/setup.exe from the archive.
           # Autobuild packages are .tar.zst — use Python to handle extraction
           # since Windows Git Bash tar may not support zstd natively.
-          python3 -c "
-import tarfile, subprocess, sys, os, shutil
+          cat > "$dl_tmpdir/extract.py" << 'PYEOF'
+import tarfile, subprocess, sys, os
 
-archive = '$dl_archive'
-outdir = '$dl_tmpdir'
-target = 'bin/setup.exe'
+archive = sys.argv[1]
+outdir = sys.argv[2]
+target = "bin/setup.exe"
 
 # Try native tarfile first (handles gzip, bzip2, xz)
 try:
     with tarfile.open(archive) as tf:
         tf.extract(target, outdir)
-        print(f'Extracted {target} via tarfile')
+        print("Extracted %s via tarfile" % target)
         sys.exit(0)
 except Exception as e:
-    print(f'tarfile failed ({e}), trying zstd...')
+    print("tarfile failed (%s), trying zstd..." % e)
 
 # Decompress zstd first, then extract
-tar_path = archive + '.tar'
+tar_path = archive + ".tar"
 try:
-    # Try system zstd first
-    subprocess.run(['zstd', '-d', '-f', archive, '-o', tar_path], check=True)
+    subprocess.run(["zstd", "-d", "-f", archive, "-o", tar_path], check=True)
 except FileNotFoundError:
-    # Fall back to pip-installed zstandard
-    subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', 'zstandard'], check=True)
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "zstandard"], check=True)
     import importlib
-    zstandard = importlib.import_module('zstandard')
+    zstandard = importlib.import_module("zstandard")
     dctx = zstandard.ZstdDecompressor()
-    with open(archive, 'rb') as ifh, open(tar_path, 'wb') as ofh:
+    with open(archive, "rb") as ifh, open(tar_path, "wb") as ofh:
         dctx.copy_stream(ifh, ofh)
 
 with tarfile.open(tar_path) as tf:
     tf.extract(target, outdir)
-    print(f'Extracted {target} via zstd + tarfile')
-"
+    print("Extracted %s via zstd + tarfile" % target)
+PYEOF
+          python3 "$dl_tmpdir/extract.py" "$dl_archive" "$dl_tmpdir"
 
           if [[ -f "$dl_tmpdir/bin/setup.exe" ]]; then
             cp "$dl_tmpdir/bin/setup.exe" "$BUNDLED_SETUP"
