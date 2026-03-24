@@ -120,6 +120,70 @@ runs:
           --team-id "$note_team" \
           --keychain "$HOME/Library/Keychains/viewer.keychain-db"
 
+    - name: Pre-sign nested binaries
+      if: ${{ inputs.velopack_pack_id }}
+      shell: bash
+      env:
+        cert_name: "${{ inputs.cert_name }}"
+      run: |
+        set -x -e
+        app_bundle="$(ls -dt .app/*.app | head -n 1)"
+        resources="$app_bundle/Contents/Resources"
+        entitlements="${{ github.action_path }}/installer/slplugin.entitlements"
+        keychain="viewer.keychain"
+
+        # codesign --deep doesn't recurse into SLPlugin.app or sign
+        # loose dylibs in Resources/. We must sign these inside-out
+        # before vpk pack so that notarization passes.
+
+        # 1) Plain-sign all dylibs (no entitlements needed)
+        find "$resources" -name '*.dylib' -print0 | while IFS= read -r -d '' dylib; do
+          /usr/bin/codesign --force --timestamp --keychain "$keychain" \
+                   --sign "$cert_name" "$dylib"
+        done
+
+        # Also sign dylibs inside CEF framework Libraries/
+        find "$app_bundle/Contents/Frameworks" -name '*.dylib' -print0 2>/dev/null | while IFS= read -r -d '' dylib; do
+          /usr/bin/codesign --force --timestamp --keychain "$keychain" \
+                   --sign "$cert_name" "$dylib"
+        done
+
+        # 2) Sign nested app bundles and executables with entitlements + hardened runtime
+        # DullahanHelper apps (inside SLPlugin.app/Contents/Frameworks/)
+        find "$resources" -path '*/Frameworks/DullahanHelper*.app' -print0 | while IFS= read -r -d '' helper; do
+          /usr/bin/codesign --force --deep --timestamp --options runtime \
+                   --entitlements "$entitlements" --keychain "$keychain" \
+                   --sign "$cert_name" "$helper"
+        done
+
+        # CEF framework itself
+        cef_fw="$resources/SLPlugin.app/Contents/Frameworks/Chromium Embedded Framework.framework"
+        if [[ -d "$cef_fw" ]]; then
+          /usr/bin/codesign --force --timestamp --keychain "$keychain" \
+                   --sign "$cert_name" "$cef_fw"
+        fi
+
+        # SLPlugin executable
+        if [[ -f "$resources/SLPlugin.app/Contents/MacOS/SLPlugin" ]]; then
+          /usr/bin/codesign --force --deep --timestamp --options runtime \
+                   --entitlements "$entitlements" --keychain "$keychain" \
+                   --sign "$cert_name" "$resources/SLPlugin.app"
+        fi
+
+        # SLVoice
+        if [[ -f "$resources/SLVoice" ]]; then
+          /usr/bin/codesign --force --timestamp --options runtime \
+                   --entitlements "$entitlements" --keychain "$keychain" \
+                   --sign "$cert_name" "$resources/SLVoice"
+        fi
+
+        # SLVersionChecker (updater)
+        if [[ -f "$resources/updater/SLVersionChecker" ]]; then
+          /usr/bin/codesign --force --timestamp --options runtime \
+                   --entitlements "$entitlements" --keychain "$keychain" \
+                   --sign "$cert_name" "$resources/updater/SLVersionChecker"
+        fi
+
     - name: Build Velopack package
       if: ${{ inputs.velopack_pack_id }}
       shell: bash
@@ -135,9 +199,9 @@ runs:
         # The app bundle from the build step
         app_bundle="$(ls -dt .app/*.app | head -n 1)"
 
-        # Run vpk pack — signs everything (--deep by default), notarizes,
-        # injects UpdateMac and sq.version, then produces the nupkg and
-        # Portable.zip from it.
+        # Run vpk pack with --signDisableDeep since we pre-signed
+        # all nested binaries. vpk will sign the top-level bundle
+        # and handle notarization.
         vpk_rc=0
         vpk pack \
           --packId "$PACK_ID" \
@@ -151,6 +215,7 @@ runs:
           --verbose \
           --signAppIdentity "$CERT_NAME" \
           --signEntitlements "${{ github.action_path }}/installer/slplugin.entitlements" \
+          --signDisableDeep \
           --notaryProfile "velopack-notary" \
           --keychain "$HOME/Library/Keychains/viewer.keychain-db" \
         || vpk_rc=$?
