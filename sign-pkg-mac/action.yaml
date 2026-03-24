@@ -73,116 +73,12 @@ runs:
         mkdir -p ".app"
         tar xJf .tarball/* -C ".app"
 
-    # Velopack packaging — vpk pack handles signing, notarization, and
-    # injection of UpdateMac + sq.version into the app bundle.
+    # Velopack packaging — run BEFORE signing so that UpdateMac and sq.version
+    # are injected into the app bundle. sign.sh then signs everything including
+    # the Velopack updater binaries.
     - name: Setup Velopack CLI
       if: ${{ inputs.velopack_pack_id }}
       uses: secondlife/viewer-build-util/setup-velopack@geenz/velopack
-
-    - name: Set up signing keychain
-      if: ${{ inputs.velopack_pack_id }}
-      shell: bash
-      env:
-        cert_base64: "${{ inputs.cert_base64 }}"
-        cert_pass: "${{ inputs.cert_pass }}"
-      run: |
-        set -x -e
-        # Decode the signing certificate
-        base64 --decode > certificate.p12 <<< "$cert_base64"
-
-        # Create a temporary keychain for headless CI signing
-        set +x
-        keychain_pass="$(dd bs=8 count=1 if=/dev/urandom 2>/dev/null | base64)"
-        echo "::add-mask::$keychain_pass"
-        set -x
-        sleep 1
-        security create-keychain -p "$keychain_pass" viewer.keychain
-        security default-keychain -s viewer.keychain
-        security unlock-keychain -p "$keychain_pass" viewer.keychain
-        security import certificate.p12 -k viewer.keychain -P "$cert_pass" \
-                 -T /usr/bin/codesign
-        security set-key-partition-list -S 'apple-tool:,apple:,codesign:' -s \
-                 -k "$keychain_pass" viewer.keychain
-        rm certificate.p12
-
-    - name: Store notarytool credentials
-      if: ${{ inputs.velopack_pack_id }}
-      shell: bash
-      env:
-        note_user: "${{ inputs.note_user }}"
-        note_pass: "${{ inputs.note_pass }}"
-        note_team: "${{ inputs.note_team }}"
-      run: |
-        set -x -e
-        xcrun notarytool store-credentials "velopack-notary" \
-          --apple-id "$note_user" \
-          --password "$note_pass" \
-          --team-id "$note_team" \
-          --keychain "$HOME/Library/Keychains/viewer.keychain-db"
-
-    - name: Pre-sign nested binaries
-      if: ${{ inputs.velopack_pack_id }}
-      shell: bash
-      env:
-        cert_name: "${{ inputs.cert_name }}"
-      run: |
-        set -x -e
-        app_bundle="$(ls -dt .app/*.app | head -n 1)"
-        resources="$app_bundle/Contents/Resources"
-        entitlements="${{ github.action_path }}/installer/slplugin.entitlements"
-        keychain="viewer.keychain"
-
-        # codesign --deep doesn't recurse into SLPlugin.app or sign
-        # loose dylibs in Resources/. We must sign these inside-out
-        # before vpk pack so that notarization passes.
-
-        # 1) Plain-sign all dylibs (no entitlements needed)
-        find "$resources" -name '*.dylib' -print0 | while IFS= read -r -d '' dylib; do
-          /usr/bin/codesign --force --timestamp --keychain "$keychain" \
-                   --sign "$cert_name" "$dylib"
-        done
-
-        # Also sign dylibs inside CEF framework Libraries/
-        find "$app_bundle/Contents/Frameworks" -name '*.dylib' -print0 2>/dev/null | while IFS= read -r -d '' dylib; do
-          /usr/bin/codesign --force --timestamp --keychain "$keychain" \
-                   --sign "$cert_name" "$dylib"
-        done
-
-        # 2) Sign nested app bundles and executables with entitlements + hardened runtime
-        # DullahanHelper apps (inside SLPlugin.app/Contents/Frameworks/)
-        find "$resources" -path '*/Frameworks/DullahanHelper*.app' -print0 | while IFS= read -r -d '' helper; do
-          /usr/bin/codesign --force --deep --timestamp --options runtime \
-                   --entitlements "$entitlements" --keychain "$keychain" \
-                   --sign "$cert_name" "$helper"
-        done
-
-        # CEF framework itself
-        cef_fw="$resources/SLPlugin.app/Contents/Frameworks/Chromium Embedded Framework.framework"
-        if [[ -d "$cef_fw" ]]; then
-          /usr/bin/codesign --force --timestamp --keychain "$keychain" \
-                   --sign "$cert_name" "$cef_fw"
-        fi
-
-        # SLPlugin executable
-        if [[ -f "$resources/SLPlugin.app/Contents/MacOS/SLPlugin" ]]; then
-          /usr/bin/codesign --force --deep --timestamp --options runtime \
-                   --entitlements "$entitlements" --keychain "$keychain" \
-                   --sign "$cert_name" "$resources/SLPlugin.app"
-        fi
-
-        # SLVoice
-        if [[ -f "$resources/SLVoice" ]]; then
-          /usr/bin/codesign --force --timestamp --options runtime \
-                   --entitlements "$entitlements" --keychain "$keychain" \
-                   --sign "$cert_name" "$resources/SLVoice"
-        fi
-
-        # SLVersionChecker (updater)
-        if [[ -f "$resources/updater/SLVersionChecker" ]]; then
-          /usr/bin/codesign --force --timestamp --options runtime \
-                   --entitlements "$entitlements" --keychain "$keychain" \
-                   --sign "$cert_name" "$resources/updater/SLVersionChecker"
-        fi
 
     - name: Build Velopack package
       if: ${{ inputs.velopack_pack_id }}
@@ -193,16 +89,14 @@ runs:
         PACK_TITLE: ${{ inputs.velopack_pack_title }}
         MAIN_EXE: ${{ inputs.velopack_main_exe }}
         BUNDLE_ID: ${{ inputs.velopack_bundle_id }}
-        CERT_NAME: "${{ inputs.cert_name }}"
       run: |
         set -x
         # The app bundle from the build step
         app_bundle="$(ls -dt .app/*.app | head -n 1)"
 
-        # Run vpk pack with --signDisableDeep since we pre-signed
-        # all nested binaries. vpk will sign the top-level bundle
-        # and handle notarization.
-        vpk_rc=0
+        # Run vpk pack — unsigned. This injects UpdateMac and sq.version
+        # into the bundle, then produces the nupkg and Portable.zip.
+        # Signing and notarization are handled by sign.sh afterward.
         vpk pack \
           --packId "$PACK_ID" \
           --packVersion "$PACK_VERSION" \
@@ -212,32 +106,7 @@ runs:
           --bundleId "$BUNDLE_ID" \
           --outputDir Releases \
           --noInst \
-          --verbose \
-          --signAppIdentity "$CERT_NAME" \
-          --signEntitlements "${{ github.action_path }}/installer/slplugin.entitlements" \
-          --signDisableDeep \
-          --notaryProfile "velopack-notary" \
-          --keychain "$HOME/Library/Keychains/viewer.keychain-db" \
-        || vpk_rc=$?
-
-        if [[ $vpk_rc -ne 0 ]]; then
-          echo "::error::vpk pack failed with exit code $vpk_rc"
-          echo "Fetching notarization log from Apple..."
-          job_id=$(xcrun notarytool history \
-            --keychain-profile "velopack-notary" \
-            --keychain "$HOME/Library/Keychains/viewer.keychain-db" 2>&1 \
-            | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' \
-            | head -n 1)
-          if [[ -n "$job_id" ]]; then
-            echo "Fetching notarization log for job $job_id"
-            xcrun notarytool log "$job_id" \
-              --keychain-profile "velopack-notary" \
-              --keychain "$HOME/Library/Keychains/viewer.keychain-db" || true
-          else
-            echo "::warning::Could not find notarization job ID"
-          fi
-          exit $vpk_rc
-        fi
+          --verbose
 
     - name: Replace app bundle with Velopack-ready version
       if: ${{ inputs.velopack_pack_id }}
@@ -273,6 +142,34 @@ runs:
           echo "UpdateMac binary present"
         else
           echo "::warning::UpdateMac binary not found in extracted bundle"
+        fi
+
+    - name: Sign and notarize the app
+      shell: bash
+      env:
+        cert_base64: "${{ inputs.cert_base64 }}"
+        cert_name: "${{ inputs.cert_name }}"
+        cert_pass: "${{ inputs.cert_pass }}"
+        note_user: "${{ inputs.note_user }}"
+        note_pass: "${{ inputs.note_pass }}"
+        note_team: "${{ inputs.note_team }}"
+      run: |
+        # Sign the Velopack-ready app bundle (which includes UpdateMac).
+        app_bundle="$(ls -dt .app/*.app | head -n 1)"
+        "${{ github.action_path }}/sign.sh" "$app_bundle"
+
+    - name: Repackage signed Portable.zip
+      if: ${{ inputs.velopack_pack_id }}
+      shell: bash
+      run: |
+        set -x -e
+        portable_zip="$(ls Releases/*-Portable.zip | head -n 1)"
+        if [[ -n "$portable_zip" ]]; then
+          # Replace the unsigned Portable.zip with the signed bundle
+          rm "$portable_zip"
+          app_bundle="$(ls -dt .app/*.app | head -n 1)"
+          ditto -c -k --keepParent "$app_bundle" "$portable_zip"
+          echo "Repackaged signed bundle into $portable_zip"
         fi
 
     - name: Set up the app sparseimage
