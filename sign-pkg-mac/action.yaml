@@ -118,7 +118,7 @@ runs:
           --apple-id "$note_user" \
           --password "$note_pass" \
           --team-id "$note_team" \
-          --keychain viewer.keychain
+          --keychain "$HOME/Library/Keychains/viewer.keychain-db"
 
     - name: Build Velopack package
       if: ${{ inputs.velopack_pack_id }}
@@ -150,7 +150,7 @@ runs:
           --verbose \
           --signAppIdentity "$CERT_NAME" \
           --notaryProfile "velopack-notary" \
-          --keychain "viewer.keychain"
+          --keychain "$HOME/Library/Keychains/viewer.keychain-db"
 
     - name: Replace app bundle with Velopack-ready version
       if: ${{ inputs.velopack_pack_id }}
