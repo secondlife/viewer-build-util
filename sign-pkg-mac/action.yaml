@@ -149,6 +149,7 @@ runs:
           --noInst \
           --verbose \
           --signAppIdentity "$CERT_NAME" \
+          --signEntitlements "${{ github.action_path }}/installer/slplugin.entitlements" \
           --notaryProfile "velopack-notary" \
           --keychain "$HOME/Library/Keychains/viewer.keychain-db"
 
