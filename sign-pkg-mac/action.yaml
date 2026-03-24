@@ -138,6 +138,7 @@ runs:
         # Run vpk pack — signs everything (--deep by default), notarizes,
         # injects UpdateMac and sq.version, then produces the nupkg and
         # Portable.zip from it.
+        vpk_rc=0
         vpk pack \
           --packId "$PACK_ID" \
           --packVersion "$PACK_VERSION" \
@@ -151,27 +152,26 @@ runs:
           --signAppIdentity "$CERT_NAME" \
           --signEntitlements "${{ github.action_path }}/installer/slplugin.entitlements" \
           --notaryProfile "velopack-notary" \
-          --keychain "$HOME/Library/Keychains/viewer.keychain-db"
+          --keychain "$HOME/Library/Keychains/viewer.keychain-db" \
+        || vpk_rc=$?
 
-    - name: Fetch notarization log on failure
-      if: ${{ failure() && inputs.velopack_pack_id }}
-      shell: bash
-      run: |
-        set -x
-        # Find the notarization job ID from the most recent submission
-        # notarytool history lists recent submissions; grab the first UUID
-        job_id=$(xcrun notarytool history \
-          --keychain-profile "velopack-notary" \
-          --keychain "$HOME/Library/Keychains/viewer.keychain-db" 2>&1 \
-          | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' \
-          | head -n 1)
-        if [[ -n "$job_id" ]]; then
-          echo "Fetching notarization log for job $job_id"
-          xcrun notarytool log "$job_id" \
+        if [[ $vpk_rc -ne 0 ]]; then
+          echo "::error::vpk pack failed with exit code $vpk_rc"
+          echo "Fetching notarization log from Apple..."
+          job_id=$(xcrun notarytool history \
             --keychain-profile "velopack-notary" \
-            --keychain "$HOME/Library/Keychains/viewer.keychain-db"
-        else
-          echo "::warning::Could not find notarization job ID"
+            --keychain "$HOME/Library/Keychains/viewer.keychain-db" 2>&1 \
+            | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' \
+            | head -n 1)
+          if [[ -n "$job_id" ]]; then
+            echo "Fetching notarization log for job $job_id"
+            xcrun notarytool log "$job_id" \
+              --keychain-profile "velopack-notary" \
+              --keychain "$HOME/Library/Keychains/viewer.keychain-db" || true
+          else
+            echo "::warning::Could not find notarization job ID"
+          fi
+          exit $vpk_rc
         fi
 
     - name: Replace app bundle with Velopack-ready version
