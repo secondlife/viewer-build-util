@@ -33,7 +33,7 @@ runs:
 
     - name: Install Velopack CLI
       shell: bash
-      run: dotnet tool install -g vpk
+      run: dotnet tool install -g vpk --prerelease
 
     - name: Replace bundled Setup.exe with patched version
       if: ${{ runner.os == 'Windows' && inputs.setup_exe_source != 'none' }}
