@@ -73,9 +73,27 @@ runs:
         mkdir -p ".app"
         tar xJf .tarball/* -C ".app"
 
-    # Velopack packaging — run BEFORE signing so that UpdateMac and sq.version
-    # are injected into the app bundle. sign.sh then signs everything including
-    # the Velopack updater binaries.
+    # Sign and notarize the app bundle BEFORE Velopack packaging so that
+    # the nupkg contains signed binaries. This ensures that Velopack
+    # updates install a properly signed bundle, preserving macOS TCC
+    # permissions (e.g., microphone access for SLVoice).
+    - name: Sign and notarize the app
+      shell: bash
+      env:
+        cert_base64: "${{ inputs.cert_base64 }}"
+        cert_name: "${{ inputs.cert_name }}"
+        cert_pass: "${{ inputs.cert_pass }}"
+        note_user: "${{ inputs.note_user }}"
+        note_pass: "${{ inputs.note_pass }}"
+        note_team: "${{ inputs.note_team }}"
+      run: |
+        app_bundle="$(ls -dt .app/*.app | head -n 1)"
+        "${{ github.action_path }}/sign.sh" "$app_bundle"
+
+    # Velopack packaging — runs AFTER signing so that the nupkg and
+    # Portable.zip contain signed binaries. vpk injects UpdateMac and
+    # sq.version, signs only its own additions (UpdateMac), and produces
+    # the nupkg and Portable.zip.
     - name: Setup Velopack CLI
       if: ${{ inputs.velopack_pack_id }}
       uses: secondlife/viewer-build-util/setup-velopack@geenz/velopack
@@ -89,14 +107,15 @@ runs:
         PACK_TITLE: ${{ inputs.velopack_pack_title }}
         MAIN_EXE: ${{ inputs.velopack_main_exe }}
         BUNDLE_ID: ${{ inputs.velopack_bundle_id }}
+        CERT_NAME: "${{ inputs.cert_name }}"
       run: |
         set -x
-        # The app bundle from the build step
         app_bundle="$(ls -dt .app/*.app | head -n 1)"
 
-        # Run vpk pack — unsigned. This injects UpdateMac and sq.version
-        # into the bundle, then produces the nupkg and Portable.zip.
-        # Signing and notarization are handled by sign.sh afterward.
+        # Run vpk pack on the already-signed bundle.
+        # --signDisableDeep: don't re-sign our pre-signed binaries
+        # --signAppIdentity: sign only what vpk adds (UpdateMac, top-level bundle)
+        # --signEntitlements: use our entitlements for UpdateMac
         vpk pack \
           --packId "$PACK_ID" \
           --packVersion "$PACK_VERSION" \
@@ -106,30 +125,29 @@ runs:
           --bundleId "$BUNDLE_ID" \
           --outputDir Releases \
           --noInst \
-          --verbose
+          --verbose \
+          --signAppIdentity "$CERT_NAME" \
+          --signEntitlements "${{ github.action_path }}/installer/slplugin.entitlements" \
+          --signDisableDeep \
+          --keychain "viewer.keychain"
 
     - name: Replace app bundle with Velopack-ready version
       if: ${{ inputs.velopack_pack_id }}
       shell: bash
-      env:
-        PACK_ID: ${{ inputs.velopack_pack_id }}
-        PACK_TITLE: ${{ inputs.velopack_pack_title }}
       run: |
         set -x
-        # The Portable.zip contains the app bundle with UpdateMac and sq.version
-        # already injected by vpk pack. Extract it and use it for the DMG.
+        # The Portable.zip contains the signed app bundle with UpdateMac
+        # and sq.version injected by vpk pack.
         portable_zip="$(ls Releases/*-Portable.zip | head -n 1)"
         if [[ -z "$portable_zip" ]]; then
           echo "::error::No Portable.zip found in Releases/"
           exit 1
         fi
 
-        # Remove the original app bundle and extract the Velopack-ready one
+        # Replace .app/ with the Velopack-ready bundle
         rm -rf .app/*.app
-        # ditto preserves macOS metadata, resource forks, and symlinks
         ditto -xk "$portable_zip" .app/
 
-        # Verify we got an app bundle
         new_app="$(ls -dt .app/*.app | head -n 1)"
         if [[ -z "$new_app" ]]; then
           echo "::error::No .app bundle found after extracting Portable.zip"
@@ -137,39 +155,10 @@ runs:
         fi
 
         echo "Using Velopack-ready app bundle: $new_app"
-        # Verify UpdateMac is present
         if [[ -f "$new_app/Contents/MacOS/UpdateMac" ]]; then
           echo "UpdateMac binary present"
         else
           echo "::warning::UpdateMac binary not found in extracted bundle"
-        fi
-
-    - name: Sign and notarize the app
-      shell: bash
-      env:
-        cert_base64: "${{ inputs.cert_base64 }}"
-        cert_name: "${{ inputs.cert_name }}"
-        cert_pass: "${{ inputs.cert_pass }}"
-        note_user: "${{ inputs.note_user }}"
-        note_pass: "${{ inputs.note_pass }}"
-        note_team: "${{ inputs.note_team }}"
-      run: |
-        # Sign the Velopack-ready app bundle (which includes UpdateMac).
-        app_bundle="$(ls -dt .app/*.app | head -n 1)"
-        "${{ github.action_path }}/sign.sh" "$app_bundle"
-
-    - name: Repackage signed Portable.zip
-      if: ${{ inputs.velopack_pack_id }}
-      shell: bash
-      run: |
-        set -x -e
-        portable_zip="$(ls Releases/*-Portable.zip | head -n 1)"
-        if [[ -n "$portable_zip" ]]; then
-          # Replace the unsigned Portable.zip with the signed bundle
-          rm "$portable_zip"
-          app_bundle="$(ls -dt .app/*.app | head -n 1)"
-          ditto -c -k --keepParent "$app_bundle" "$portable_zip"
-          echo "Repackaged signed bundle into $portable_zip"
         fi
 
     - name: Set up the app sparseimage
