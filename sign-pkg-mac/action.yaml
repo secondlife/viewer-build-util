@@ -129,7 +129,7 @@ runs:
           --signAppIdentity "$CERT_NAME" \
           --signEntitlements "${{ github.action_path }}/installer/slplugin.entitlements" \
           --signDisableDeep \
-          --keychain "viewer.keychain"
+          --keychain "$HOME/Library/Keychains/viewer.keychain-db"
 
     - name: Replace app bundle with Velopack-ready version
       if: ${{ inputs.velopack_pack_id }}
