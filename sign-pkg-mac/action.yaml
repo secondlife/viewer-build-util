@@ -161,6 +161,37 @@ runs:
           echo "::warning::UpdateMac binary not found in extracted bundle"
         fi
 
+    - name: Re-sign and staple the Velopack-ready bundle
+      if: ${{ inputs.velopack_pack_id }}
+      shell: bash
+      env:
+        cert_name: "${{ inputs.cert_name }}"
+        note_user: "${{ inputs.note_user }}"
+        note_pass: "${{ inputs.note_pass }}"
+        note_team: "${{ inputs.note_team }}"
+      run: |
+        set -x -e
+        app_bundle="$(ls -dt .app/*.app | head -n 1)"
+        entitlements="${{ github.action_path }}/installer/slplugin.entitlements"
+
+        # vpk added UpdateMac and sq.version which invalidates the top-level
+        # bundle signature. Inner binaries are still signed from sign.sh.
+        # Re-sign the top-level bundle to seal the new contents.
+        /usr/bin/codesign --force --deep --timestamp --options runtime \
+                 --entitlements "$entitlements" --keychain viewer.keychain \
+                 --sign "$cert_name" "$app_bundle"
+
+        # Verify the signature is valid
+        codesign -vvvv "$app_bundle"
+        spctl -a -texec -vvvv "$app_bundle"
+
+        # Re-staple the notarization ticket (xattrs are lost during vpk's
+        # copy and zip round-trip)
+        xcrun stapler staple "$app_bundle"
+
+        # Validate staple
+        xcrun stapler validate "$app_bundle"
+
     - name: Set up the app sparseimage
       shell: bash
       run: |
