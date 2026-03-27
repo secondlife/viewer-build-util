@@ -93,10 +93,25 @@ runs:
         app_bundle="$(ls -dt .app/*.app | head -n 1)"
         "${{ github.action_path }}/sign.sh" "$app_bundle"
 
-    # Velopack packaging — runs AFTER signing so that the nupkg and
-    # Portable.zip contain signed binaries. vpk injects UpdateMac and
-    # sq.version, signs only its own additions (UpdateMac), and produces
-    # the nupkg and Portable.zip.
+    - name: Store notarytool credentials
+      if: ${{ inputs.velopack_pack_id }}
+      shell: bash
+      env:
+        note_user: "${{ inputs.note_user }}"
+        note_pass: "${{ inputs.note_pass }}"
+        note_team: "${{ inputs.note_team }}"
+      run: |
+        set -x -e
+        xcrun notarytool store-credentials "velopack-notary" \
+          --apple-id "$note_user" \
+          --password "$note_pass" \
+          --team-id "$note_team" \
+          --keychain "$HOME/Library/Keychains/viewer.keychain-db"
+
+    # Velopack packaging — runs AFTER signing. vpk injects UpdateMac and
+    # sq.version, signs its own additions, notarizes the entire bundle
+    # (including our pre-signed binaries), and produces the nupkg and
+    # Portable.zip.
     - name: Setup Velopack CLI
       if: ${{ inputs.velopack_pack_id }}
       uses: secondlife/viewer-build-util/setup-velopack@geenz/velopack
@@ -119,6 +134,7 @@ runs:
         # --signDisableDeep: don't re-sign our pre-signed binaries
         # --signAppIdentity: sign only what vpk adds (UpdateMac, top-level bundle)
         # --signEntitlements: use our entitlements for UpdateMac
+        # --notaryProfile: notarize the final bundle (covers all binaries)
         vpk pack \
           --packId "$PACK_ID" \
           --packVersion "$PACK_VERSION" \
@@ -132,6 +148,7 @@ runs:
           --signAppIdentity "$CERT_NAME" \
           --signEntitlements "${{ github.action_path }}/installer/slplugin.entitlements" \
           --signDisableDeep \
+          --notaryProfile "velopack-notary" \
           --keychain "$HOME/Library/Keychains/viewer.keychain-db"
 
     - name: Replace app bundle with Velopack-ready version
@@ -164,59 +181,17 @@ runs:
           echo "::warning::UpdateMac binary not found in extracted bundle"
         fi
 
-    - name: Re-sign, notarize, and staple the Velopack-ready bundle
+    - name: Staple and validate the Velopack-ready bundle
       if: ${{ inputs.velopack_pack_id }}
       shell: bash
-      env:
-        cert_name: "${{ inputs.cert_name }}"
-        note_user: "${{ inputs.note_user }}"
-        note_pass: "${{ inputs.note_pass }}"
-        note_team: "${{ inputs.note_team }}"
       run: |
         set -x -e
         app_bundle="$(ls -dt .app/*.app | head -n 1)"
-        entitlements="${{ github.action_path }}/installer/slplugin.entitlements"
 
-        # vpk added UpdateMac and sq.version which invalidates the top-level
-        # bundle signature and notarization ticket. Inner binaries are still
-        # signed from sign.sh. Re-sign the top-level bundle to seal the new
-        # contents, then notarize and staple the final result.
-        /usr/bin/codesign --force --deep --timestamp --options runtime \
-                 --entitlements "$entitlements" --keychain viewer.keychain \
-                 --sign "$cert_name" "$app_bundle"
-
-        # Verify signature
-        codesign -vvvv "$app_bundle"
-
-        # Notarize
-        echo "Creating notarization archive"
-        app_base="$(basename "$app_bundle")"
-        zip_file="$RUNNER_TEMP/${app_base/.app/.zip}"
-        ditto -c -k --keepParent "$app_bundle" "$zip_file"
-
-        credentials=(--apple-id "$note_user" --password "$note_pass" --team-id "$note_team")
-
-        echo "Submitting for notarization"
-        set +e
-        output="$(xcrun notarytool submit "$zip_file" --wait \
-                  "${credentials[@]}" 2>&1 | \
-                  tee /dev/stderr ; \
-                  exit "${PIPESTATUS[0]}")"
-        rc=$?
-        set +x
-        [[ "$output" =~ 'id: '([^[:space:]]+) ]]
-        match=$?
-        set -x
-        if [[ $match -eq 0 ]]; then
-            xcrun notarytool log "${BASH_REMATCH[1]}" "${credentials[@]}"
-        fi
-        rm -f "$zip_file"
-        [[ $rc -ne 0 ]] && exit $rc
-        set -e
-
-        # Staple and validate
+        # vpk already notarized the bundle. Staple the ticket and validate.
         xcrun stapler staple "$app_bundle"
         xcrun stapler validate "$app_bundle"
+        codesign -vvvv "$app_bundle"
         spctl -a -texec -vvvv "$app_bundle"
 
     - name: Set up the app sparseimage
