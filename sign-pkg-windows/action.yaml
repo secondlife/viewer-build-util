@@ -133,6 +133,54 @@ runs:
       with:
         setup_exe_source: ${{ inputs.setup_exe_source }}
 
+    - name: Stamp icon into Velopack setup template
+      if: ${{ inputs.installer_type == 'velopack' && inputs.velopack_icon != '' }}
+      shell: bash
+      env:
+        ICON: ${{ inputs.velopack_icon }}
+      run: |
+        set -x
+        if [[ ! -f ".app/$ICON" ]]; then
+          echo "Icon not found at .app/$ICON, skipping template icon stamp"
+          exit 0
+        fi
+
+        # Find the vpk vendor setup.exe template
+        VPK_STORE=""
+        for candidate in \
+          "$HOME/.dotnet/tools/.store/vpk" \
+          "$USERPROFILE/.dotnet/tools/.store/vpk" \
+          "$(cygpath "$USERPROFILE" 2>/dev/null)/.dotnet/tools/.store/vpk"
+        do
+          if [[ -d "$candidate" ]]; then
+            VPK_STORE="$candidate"
+            break
+          fi
+        done
+
+        if [[ -z "$VPK_STORE" ]]; then
+          echo "::warning::vpk tool store not found, skipping template icon stamp"
+          exit 0
+        fi
+
+        TEMPLATE_SETUP="$(find "$VPK_STORE" -iname 'setup.exe' -type f | head -n 1)"
+        if [[ -z "$TEMPLATE_SETUP" ]]; then
+          echo "::warning::setup.exe template not found in vpk store, skipping icon stamp"
+          exit 0
+        fi
+        echo "Found setup.exe template at: $TEMPLATE_SETUP"
+
+        # Download rcedit and stamp the icon into the template PE resources.
+        # vpk's --icon flag bundles the .ico inside the archive but does not
+        # update the PE RT_ICON resources when --signTemplate is used, so
+        # Windows Explorer shows a generic icon instead of the app icon.
+        # By stamping the template before vpk pack, the final Setup.exe
+        # inherits the correct icon and vpk signs the result normally.
+        rcedit_url="https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe"
+        curl -L -f -o rcedit.exe "$rcedit_url"
+        ./rcedit.exe "$TEMPLATE_SETUP" --set-icon ".app/$ICON"
+        echo "Stamped icon into setup.exe template"
+
     - name: Build and sign Velopack package
       if: ${{ inputs.installer_type == 'velopack' }}
       shell: bash
