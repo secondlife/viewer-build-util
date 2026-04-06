@@ -1,0 +1,136 @@
+name: setup-velopack
+description:
+  Install the Velopack CLI (vpk) and replace the bundled Setup.exe
+  with the patched version from our 3p-velopack autobuild package
+  that tolerates unknown command-line arguments from legacy launchers.
+
+inputs:
+  dotnet_version:
+    description: ".NET SDK version to install"
+    required: false
+    default: '9.0.x'
+  setup_exe_source:
+    description: >
+      Where to get the patched setup.exe (Windows only). Options:
+        'auto' (default) - Download from latest 3p-velopack GitHub release
+        'none' - Skip replacement, use upstream vpk's bundled setup.exe
+        A URL  - Download from this specific URL
+    required: false
+    default: 'auto'
+  github_token:
+    description: >
+      GitHub token with access to secondlife-3p/3p-velopack releases.
+      Required when setup_exe_source is 'auto'. Falls back to github.token.
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ inputs.dotnet_version }}
+
+    - name: Install Velopack CLI
+      shell: bash
+      run: dotnet tool install -g vpk --prerelease
+
+    - name: Replace bundled Setup.exe with patched version
+      if: ${{ runner.os == 'Windows' && inputs.setup_exe_source != 'none' }}
+      shell: bash
+      env:
+        SETUP_EXE_SOURCE: ${{ inputs.setup_exe_source }}
+        GH_TOKEN: ${{ inputs.github_token || github.token }}
+      run: |
+        set -e
+
+        # Find the vpk tool store — try both Unix and Windows-style home paths
+        VPK_STORE=""
+        for candidate in \
+          "$HOME/.dotnet/tools/.store/vpk" \
+          "$USERPROFILE/.dotnet/tools/.store/vpk" \
+          "$(cygpath "$USERPROFILE" 2>/dev/null)/.dotnet/tools/.store/vpk"
+        do
+          if [[ -d "$candidate" ]]; then
+            VPK_STORE="$candidate"
+            break
+          fi
+        done
+
+        if [[ -z "$VPK_STORE" ]]; then
+          echo "::error::vpk tool store not found"
+          exit 1
+        fi
+
+        # Find setup.exe in the store
+        BUNDLED_SETUP="$(find "$VPK_STORE" -iname 'setup.exe' -type f | head -n 1)"
+        if [[ -z "$BUNDLED_SETUP" ]]; then
+          echo "::error::Could not find setup.exe in vpk tool store at $VPK_STORE"
+          find "$VPK_STORE" -type f | head -20
+          exit 1
+        fi
+        echo "Found bundled setup.exe at: $BUNDLED_SETUP"
+
+        if [[ "$SETUP_EXE_SOURCE" == "auto" ]]; then
+          # Fetch the latest release from 3p-velopack and find the windows64 asset
+          echo "Fetching latest 3p-velopack release..."
+          RELEASE_JSON="$(curl -sf \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/secondlife-3p/3p-velopack/releases/latest")"
+
+          if [[ -z "$RELEASE_JSON" ]]; then
+            echo "::warning::Could not fetch 3p-velopack releases, skipping setup.exe replacement"
+            exit 0
+          fi
+
+          # Find the windows64 asset API URL (use 'url' not 'browser_download_url' for auth)
+          ASSET_URL="$(echo "$RELEASE_JSON" | python3 -c "
+        import json, sys
+        data = json.load(sys.stdin)
+        for asset in data.get('assets', []):
+            if 'windows64' in asset['name']:
+                print(asset['url'])
+                break
+        ")"
+
+          if [[ -z "$ASSET_URL" ]]; then
+            echo "::warning::No windows64 asset found in latest 3p-velopack release, skipping setup.exe replacement"
+            exit 0
+          fi
+
+          echo "Downloading 3p-velopack windows64 package..."
+          dl_tmpdir="$(mktemp -d)"
+          dl_archive="$dl_tmpdir/velopack-pkg"
+          curl -L -f -o "$dl_archive" \
+            -H "Accept: application/octet-stream" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            "$ASSET_URL"
+
+          # Extract bin/setup.exe from the archive.
+          # Autobuild packages are .tar.zst — vpk ships zstd.exe in its vendor dir.
+          ZSTD="$(find "$VPK_STORE" -name 'zstd.exe' -type f | head -n 1)"
+          if [[ -n "$ZSTD" ]]; then
+            echo "Using zstd from vpk: $ZSTD"
+            "$ZSTD" -d -f "$dl_archive" -o "$dl_tmpdir/velopack.tar"
+            tar xf "$dl_tmpdir/velopack.tar" -C "$dl_tmpdir" "bin/setup.exe" 2>&1 || true
+          else
+            echo "No zstd found, trying tar directly..."
+            tar xf "$dl_archive" -C "$dl_tmpdir" "bin/setup.exe" 2>&1 || true
+          fi
+
+          if [[ -f "$dl_tmpdir/bin/setup.exe" ]]; then
+            cp "$dl_tmpdir/bin/setup.exe" "$BUNDLED_SETUP"
+            echo "Replaced setup.exe from 3p-velopack package"
+          else
+            echo "::warning::bin/setup.exe not found in 3p-velopack package, skipping replacement"
+          fi
+          rm -rf "$dl_tmpdir"
+        else
+          # Direct URL provided
+          echo "Downloading patched setup.exe from: $SETUP_EXE_SOURCE"
+          curl -L -f -o "$BUNDLED_SETUP" "$SETUP_EXE_SOURCE"
+          echo "Replaced setup.exe from URL"
+        fi
+
+        ls -la "$BUNDLED_SETUP"

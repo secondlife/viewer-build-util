@@ -18,15 +18,45 @@ inputs:
   tenant_id:
     description: "Azure signer app tenantId"
     required: true
+  installer_type:
+    description: "Installer type: 'velopack' (default) or 'nsis'"
+    default: 'velopack'
+    required: false
   nsis_version:
     description: "NSIS version to install if not already present"
     default: '3.10'
     required: true
+  velopack_pack_id:
+    description: "Velopack pack ID (from build step)"
+    required: false
+  velopack_pack_version:
+    description: "Velopack pack version (from build step)"
+    required: false
+  velopack_pack_title:
+    description: "Velopack pack title (from build step)"
+    required: false
+  velopack_main_exe:
+    description: "Velopack main executable name (from build step)"
+    required: false
+  velopack_exclude:
+    description: "Velopack exclude pattern (from build step)"
+    required: false
+  velopack_icon:
+    description: "Velopack icon filename in .app dir (from build step)"
+    required: false
+  velopack_installer_base:
+    description: "Base name for installer output files (from build step)"
+    required: false
+  setup_exe_source:
+    description: "Patched setup.exe source: 'auto' (default), 'none', or a URL"
+    required: false
+    default: 'auto'
 
 runs:
   using: composite
   steps:
     - name: Setup NSIS
+      if: ${{ inputs.installer_type != 'velopack' }}
       # Install NSIS if not already installed on the runner
       # See https://nsis.sourceforge.io/Download
       shell: pwsh
@@ -72,15 +102,20 @@ runs:
       shell: bash
       run: pip install pyng
 
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+
     - name: Install AzureSignTool
       shell: bash
       run: dotnet tool install --global AzureSignTool
 
     - name: Sign the executables
+      if: ${{ inputs.installer_type != 'velopack' }}
       shell: bash
       run: |
         for exe in .app/SecondLifeViewer.exe \
-                   .app/SLVersionChecker.exe \
                    .app/llplugin/dullahan_host.exe
         do
             python "${{ github.action_path }}/sign.py" \
@@ -92,7 +127,121 @@ runs:
                    "$exe"
         done
 
+    - name: Setup Velopack CLI
+      if: ${{ inputs.installer_type == 'velopack' }}
+      uses: secondlife/viewer-build-util/setup-velopack@geenz/velopack
+      with:
+        setup_exe_source: ${{ inputs.setup_exe_source }}
+
+    - name: Stamp icon into Velopack setup template
+      if: ${{ inputs.installer_type == 'velopack' && inputs.velopack_icon != '' }}
+      shell: bash
+      env:
+        ICON: ${{ inputs.velopack_icon }}
+      run: |
+        set -x
+        if [[ ! -f ".app/$ICON" ]]; then
+          echo "Icon not found at .app/$ICON, skipping template icon stamp"
+          exit 0
+        fi
+
+        # Find the vpk vendor setup.exe template
+        VPK_STORE=""
+        for candidate in \
+          "$HOME/.dotnet/tools/.store/vpk" \
+          "$USERPROFILE/.dotnet/tools/.store/vpk" \
+          "$(cygpath "$USERPROFILE" 2>/dev/null)/.dotnet/tools/.store/vpk"
+        do
+          if [[ -d "$candidate" ]]; then
+            VPK_STORE="$candidate"
+            break
+          fi
+        done
+
+        if [[ -z "$VPK_STORE" ]]; then
+          echo "::warning::vpk tool store not found, skipping template icon stamp"
+          exit 0
+        fi
+
+        TEMPLATE_SETUP="$(find "$VPK_STORE" -iname 'setup.exe' -type f | head -n 1)"
+        if [[ -z "$TEMPLATE_SETUP" ]]; then
+          echo "::warning::setup.exe template not found in vpk store, skipping icon stamp"
+          exit 0
+        fi
+        echo "Found setup.exe template at: $TEMPLATE_SETUP"
+
+        # Download rcedit and stamp the icon into the template PE resources.
+        # vpk's --icon flag bundles the .ico inside the archive but does not
+        # update the PE RT_ICON resources when --signTemplate is used, so
+        # Windows Explorer shows a generic icon instead of the app icon.
+        # By stamping the template before vpk pack, the final Setup.exe
+        # inherits the correct icon and vpk signs the result normally.
+        rcedit_url="https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe"
+        curl -L -f -o rcedit.exe "$rcedit_url"
+        ./rcedit.exe "$TEMPLATE_SETUP" --set-icon ".app/$ICON"
+        echo "Stamped icon into setup.exe template"
+
+    - name: Build and sign Velopack package
+      if: ${{ inputs.installer_type == 'velopack' }}
+      shell: bash
+      env:
+        PACK_ID: ${{ inputs.velopack_pack_id }}
+        PACK_VERSION: ${{ inputs.velopack_pack_version }}
+        PACK_TITLE: ${{ inputs.velopack_pack_title }}
+        MAIN_EXE: ${{ inputs.velopack_main_exe }}
+        EXCLUDE: ${{ inputs.velopack_exclude }}
+        ICON: ${{ inputs.velopack_icon }}
+        INSTALLER_BASE: ${{ inputs.velopack_installer_base }}
+        VAULT_URI: ${{ inputs.vault_uri }}
+        CERT_NAME: ${{ inputs.cert_name }}
+        CLIENT_ID: ${{ inputs.client_id }}
+        CLIENT_SECRET: ${{ inputs.client_secret }}
+        TENANT_ID: ${{ inputs.tenant_id }}
+      run: |
+        set -x
+
+        vpk_args=(
+          vpk pack
+          --packId "$PACK_ID"
+          --packVersion "$PACK_VERSION"
+          --packDir .app
+          --mainExe "$MAIN_EXE"
+          --packTitle "$PACK_TITLE"
+          --exclude "$EXCLUDE"
+          --shortcuts ''
+          --signTemplate "AzureSignTool sign -kvu $VAULT_URI -kvi $CLIENT_ID -kvt $TENANT_ID -kvs $CLIENT_SECRET -kvc $CERT_NAME -tr http://timestamp.digicert.com -v {{file}}"
+        )
+
+        # Add icon if provided
+        if [[ -n "$ICON" && -f ".app/$ICON" ]]; then
+          vpk_args+=(--icon ".app/$ICON")
+        fi
+
+        "${vpk_args[@]}"
+
+    - name: Rename Velopack outputs
+      if: ${{ inputs.installer_type == 'velopack' }}
+      shell: bash
+      env:
+        PACK_ID: ${{ inputs.velopack_pack_id }}
+        INSTALLER_BASE: ${{ inputs.velopack_installer_base }}
+      run: |
+        # Move Setup.exe into .app for the installer upload step
+        setup="Releases/${PACK_ID}-win-Setup.exe"
+        if [[ -f "$setup" ]]; then
+          mv "$setup" ".app/${INSTALLER_BASE}_Setup.exe"
+          echo "Moved $setup to .app/${INSTALLER_BASE}_Setup.exe"
+        fi
+
+        # Rename Portable.zip to include version
+        portable="Releases/${PACK_ID}-win-Portable.zip"
+        if [[ -f "$portable" ]]; then
+          mv "$portable" "Releases/${INSTALLER_BASE}_Portable.zip"
+          echo "Moved $portable to Releases/${INSTALLER_BASE}_Portable.zip"
+        fi
+
     - name: Build the installer
+      if: ${{ inputs.installer_type != 'velopack' }}
       id: nsis
       shell: python
       run: |
@@ -128,15 +277,15 @@ runs:
         subprocess.check_call(command, cwd='.app')
 
     - name: Dump NSIS input file
-      if: ${{ failure() && steps.nsis.conclusion == 'failure' }}
+      if: ${{ failure() && steps.nsis.conclusion == 'failure' && inputs.installer_type != 'velopack' }}
       shell: bash
       run: cat '.app/secondlife_setup_tmp.nsi'
 
     - name: Sign the installer
+      if: ${{ inputs.installer_type != 'velopack' }}
       shell: bash
       run: |
-        installer="$(ls -t .app/*_Setup.exe | head -n 1)"
-        # pass installer to next step
+        installer="$(ls -t .app/*Setup.exe | head -n 1)"
         echo "installer=$installer" >> "$GITHUB_ENV"
         python "${{ github.action_path }}/sign.py" \
                --vault_uri "${{ inputs.vault_uri }}" \
@@ -146,8 +295,22 @@ runs:
                --tenant_id "${{ inputs.tenant_id }}" \
                "$installer"
 
+    - name: Find Velopack installer
+      if: ${{ inputs.installer_type == 'velopack' }}
+      shell: bash
+      run: |
+        installer="$(ls -t .app/*_Setup.exe | head -n 1)"
+        echo "installer=$installer" >> "$GITHUB_ENV"
+
     - name: Post the installer
       uses: actions/upload-artifact@v4
       with:
         name: "Windows-installer"
         path: ${{ env.installer }}
+
+    - name: Upload Velopack releases
+      if: ${{ inputs.installer_type == 'velopack' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: "Windows-releases"
+        path: Releases/

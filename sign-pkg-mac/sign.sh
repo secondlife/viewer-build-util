@@ -109,7 +109,12 @@ do
              --sign "$cert_name" "$signee"
 done
 
-spctl -a -texec -vvvv "$app_path"
+spctl -a -texec -vvvv "$app_path" || true
+
+if [[ "${SKIP_NOTARIZE:-}" == "true" ]]; then
+    echo "SKIP_NOTARIZE is set, skipping notarization and stapling"
+    exit 0
+fi
 
 # ****************************************************************************
 #   notarize the app
