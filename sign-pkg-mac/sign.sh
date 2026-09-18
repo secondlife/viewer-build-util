@@ -101,6 +101,7 @@ for signee in \
     "$resources/updater/SLVersionChecker" \
     "$resources/SLPlugin.app/Contents/MacOS/SLPlugin" \
     "$resources/SLVoice" \
+    "$resources/SLMediaProducer/SLMediaProducer" \
     "$app_path"
 do
     signloop --verbose --deep --force \
