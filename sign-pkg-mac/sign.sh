@@ -91,33 +91,46 @@ resources="$app_path/Contents/Resources"
 # Libraries/*.dylib files) isn't reliably discovered by `codesign --deep`
 # below, regardless of which bundle is doing the deep-signing - a known CEF-
 # on-macOS packaging quirk (CEF's own sample build scripts sign this binary
-# explicitly rather than relying on --deep). Sign it explicitly in the main
-# app bundle's own copy, and in the standalone copy under Resources/Frameworks
-# that SLMediaProducer links against (which --deep never walks into at all,
-# since Resources is meant for data, not nested code, so nothing else here
-# references it either). SLPlugin.app's own copy of this framework doesn't
-# need the same treatment - a companion fix stopped that phantom, always-
-# broken bundle from being packaged in the first place (ENABLE_MEDIA_PLUGINS
-# is off by default; embedded-browser media replaced it).
+# explicitly rather than relying on --deep). SLPlugin.app's own copy of this
+# framework doesn't need any of this treatment - a companion fix stopped
+# that phantom, always-broken bundle from being packaged in the first place
+# (ENABLE_MEDIA_PLUGINS is off by default; embedded-browser media replaced
+# it).
 for signee in \
     "$resources"/*.dylib \
     "$resources"/llplugin/*.dylib \
     "$resources/SLPlugin.app/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib \
     "$app_path/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib \
-    "$app_path/Contents/Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework" \
-    "$resources/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib \
-    "$resources/Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework"
+    "$resources/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib
 do
     # shellcheck disable=SC2154
     signloop --force --timestamp --keychain viewer.keychain \
              --sign "$cert_name" "$signee"
 done
 # deep signing
+#
+# The CEF framework's own main binary (as opposed to its Libraries/*.dylib
+# siblings, plain-signed above) needs the SAME hardened-runtime + entitlements
+# treatment as SLMediaProducer and the app itself, not bare signing - it's a
+# JIT-heavy V8/Chromium binary in its own right. Signing it without
+# --options runtime/--entitlements (as an earlier version of this fix did)
+# produced a binary with flags=0x0(none) and zero entitlements sitting
+# inside an otherwise fully hardened-runtime app; the mismatch crashed
+# SLMediaProducer with SIGTRAP/EXC_BREAKPOINT deep inside the framework on a
+# background thread within ~130ms of launch, but only in this notarized,
+# hardened-runtime build - never in a local or ad-hoc-signed one, where
+# nothing is hardened-runtime-restricted in the first place. Listed here
+# (main app bundle's own copy, and SLMediaProducer's standalone copy under
+# Resources/Frameworks) rather than in the plain-signing loop above, even
+# though `--deep` is a no-op on a bare executable, purely to keep it
+# visually grouped with its matching flags.
 for signee in \
     "$resources/updater/SLVersionChecker" \
     "$resources/SLPlugin.app/Contents/MacOS/SLPlugin" \
     "$resources/SLVoice" \
     "$resources/SLMediaProducer/SLMediaProducer" \
+    "$app_path/Contents/Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework" \
+    "$resources/Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework" \
     "$app_path"
 do
     signloop --verbose --deep --force \
