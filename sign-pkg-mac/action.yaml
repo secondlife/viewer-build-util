@@ -135,6 +135,7 @@ runs:
         # --signAppIdentity: sign only what vpk adds (UpdateMac, top-level bundle)
         # --signEntitlements: use our entitlements for UpdateMac
         # --notaryProfile: notarize the final bundle (covers all binaries)
+        set +e
         vpk pack \
           --packId "$PACK_ID" \
           --packVersion "$PACK_VERSION" \
@@ -149,6 +150,30 @@ runs:
           --signEntitlements "${{ github.action_path }}/installer/slplugin.entitlements" \
           --signDisableDeep \
           --notaryProfile "velopack-notary" \
+          --keychain "$HOME/Library/Keychains/viewer.keychain-db" \
+          2>&1 | tee "$RUNNER_TEMP/vpk_pack.log"
+        rc="${PIPESTATUS[0]}"
+        set -e
+        exit "$rc"
+
+    # vpk's own printed notarization summary sometimes shows an empty
+    # "issues" list even when Apple actually found specific problems, so
+    # on failure, re-fetch the full log straight from notarytool using the
+    # job id vpk already printed, instead of guessing blind.
+    - name: Dump full notarization log on failure
+      if: ${{ failure() && inputs.velopack_pack_id }}
+      shell: bash
+      run: |
+        set +e
+        jobid="$(grep -oE '"(jobId|id)": *"[0-9a-f-]{36}"' "$RUNNER_TEMP/vpk_pack.log" \
+                 | grep -oE '[0-9a-f-]{36}' | tail -n 1)"
+        if [[ -z "$jobid" ]]; then
+          echo "::warning::Could not find a notarization job id in vpk pack output"
+          exit 0
+        fi
+        echo "Fetching full notarytool log for job $jobid"
+        xcrun notarytool log "$jobid" \
+          --keychain-profile velopack-notary \
           --keychain "$HOME/Library/Keychains/viewer.keychain-db"
 
     - name: Replace app bundle with Velopack-ready version
