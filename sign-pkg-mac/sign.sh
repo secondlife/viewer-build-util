@@ -86,11 +86,27 @@ function signloop() {
 
 resources="$app_path/Contents/Resources"
 # plain signing
+#
+# The "Chromium Embedded Framework" binary itself (as opposed to its sibling
+# Libraries/*.dylib files) isn't reliably discovered by `codesign --deep`
+# below, regardless of which bundle is doing the deep-signing - a known CEF-
+# on-macOS packaging quirk (CEF's own sample build scripts sign this binary
+# explicitly rather than relying on --deep). Sign it explicitly in the main
+# app bundle's own copy, and in the standalone copy under Resources/Frameworks
+# that SLMediaProducer links against (which --deep never walks into at all,
+# since Resources is meant for data, not nested code, so nothing else here
+# references it either). SLPlugin.app's own copy of this framework doesn't
+# need the same treatment - a companion fix stopped that phantom, always-
+# broken bundle from being packaged in the first place (ENABLE_MEDIA_PLUGINS
+# is off by default; embedded-browser media replaced it).
 for signee in \
     "$resources"/*.dylib \
     "$resources"/llplugin/*.dylib \
     "$resources/SLPlugin.app/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib \
-    "$app_path/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib
+    "$app_path/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib \
+    "$app_path/Contents/Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework" \
+    "$resources/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib \
+    "$resources/Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework"
 do
     # shellcheck disable=SC2154
     signloop --force --timestamp --keychain viewer.keychain \
