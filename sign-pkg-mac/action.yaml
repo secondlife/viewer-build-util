@@ -55,6 +55,17 @@ inputs:
   velopack_bundle_id:
     description: "Velopack bundle ID (from build step)"
     required: false
+  debug_entitlements:
+    description: >
+      Diagnostic only: sign with slplugin-debug.entitlements (adds
+      com.apple.security.get-task-allow) instead of the real production
+      entitlements, to allow local debugger attachment. This makes the
+      build unnotarizable -- Apple rejects get-task-allow -- so only use
+      alongside an empty velopack_pack_id (which already skips
+      notarization). Never for distribution.
+    type: boolean
+    required: false
+    default: false
 
 runs:
   using: composite
@@ -89,6 +100,7 @@ runs:
         note_pass: "${{ inputs.note_pass }}"
         note_team: "${{ inputs.note_team }}"
         SKIP_NOTARIZE: "true"
+        ENTITLEMENTS_FILE: "${{ inputs.debug_entitlements == 'true' && format('{0}/installer/slplugin-debug.entitlements', github.action_path) || '' }}"
       run: |
         app_bundle="$(ls -dt .app/*.app | head -n 1)"
         "${{ github.action_path }}/sign.sh" "$app_bundle"
