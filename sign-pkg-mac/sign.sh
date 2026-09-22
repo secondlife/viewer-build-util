@@ -133,8 +133,12 @@ for signee in \
     "$resources/Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework" \
     "$app_path"
 do
+    # ENTITLEMENTS_FILE lets a caller substitute a debug variant (e.g. one
+    # with com.apple.security.get-task-allow added, to allow local debugger
+    # attachment) without touching the real production entitlements file.
+    # Unset/empty falls back to the normal one, as always.
     signloop --verbose --deep --force \
-             --entitlements "$mydir/installer/slplugin.entitlements" \
+             --entitlements "${ENTITLEMENTS_FILE:-$mydir/installer/slplugin.entitlements}" \
              --options runtime --keychain viewer.keychain \
              --sign "$cert_name" "$signee"
 done
