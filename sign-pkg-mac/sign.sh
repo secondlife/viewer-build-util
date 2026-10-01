@@ -111,16 +111,17 @@ done
 #
 # The CEF framework's own main binary (as opposed to its Libraries/*.dylib
 # siblings, plain-signed above) needs the SAME hardened-runtime + entitlements
-# treatment as SLMediaProducer and the app itself, not bare signing - it's a
-# JIT-heavy V8/Chromium binary in its own right. Signing it without
+# treatment as the producer executables and the app itself, not bare signing -
+# it's a JIT-heavy V8/Chromium binary in its own right. Signing it without
 # --options runtime/--entitlements (as an earlier version of this fix did)
 # produced a binary with flags=0x0(none) and zero entitlements sitting
 # inside an otherwise fully hardened-runtime app; the mismatch crashed
-# SLMediaProducer with SIGTRAP/EXC_BREAKPOINT deep inside the framework on a
-# background thread within ~130ms of launch, but only in this notarized,
-# hardened-runtime build - never in a local or ad-hoc-signed one, where
-# nothing is hardened-runtime-restricted in the first place. Listed here
-# (main app bundle's own copy, and SLMediaProducer's standalone copy under
+# SLMediaProducer (now split into SLCefProducer + SLVlcProducer) with
+# SIGTRAP/EXC_BREAKPOINT deep inside the framework on a background thread
+# within ~130ms of launch, but only in this notarized, hardened-runtime
+# build - never in a local or ad-hoc-signed one, where nothing is
+# hardened-runtime-restricted in the first place. Listed here (main app
+# bundle's own copy, and each producer's standalone copy under
 # Resources/Frameworks) rather than in the plain-signing loop above, even
 # though `--deep` is a no-op on a bare executable, purely to keep it
 # visually grouped with its matching flags.
@@ -128,7 +129,8 @@ for signee in \
     "$resources/updater/SLVersionChecker" \
     "$resources/SLPlugin.app/Contents/MacOS/SLPlugin" \
     "$resources/SLVoice" \
-    "$resources/SLMediaProducer/SLMediaProducer" \
+    "$resources/SLCefProducer/SLCefProducer" \
+    "$resources/SLVlcProducer/SLVlcProducer" \
     "$app_path/Contents/Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework" \
     "$resources/Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework" \
     "$app_path"
