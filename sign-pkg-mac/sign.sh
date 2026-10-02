@@ -96,12 +96,29 @@ resources="$app_path/Contents/Resources"
 # that phantom, always-broken bundle from being packaged in the first place
 # (ENABLE_MEDIA_PLUGINS is off by default; embedded-browser media replaced
 # it).
+#
+# SLVlcProducer's own libvlc*.dylib*/plugins/*.dylib (~350 loose files, not
+# a .framework the way CEF's Libraries/*.dylib above already are) were NEVER
+# covered by any explicit signee pattern here, unlike CEF's own dylibs -- the
+# same "`--deep` doesn't reliably reach deeply nested loose files" quirk
+# documented above, just never hit until SLVlcProducer's RTSP/parcel-audio
+# media was actually tested on a real packaged macOS build for the first
+# time. Confirmed as the real cause of a reported "libvlc produces zero
+# output, no network connection ever attempted" bug: `xattr -l` on a shipped
+# plugin dylib still showed a live com.apple.quarantine attribute even
+# though the app itself had already been launched/trusted (CEF, whose own
+# dylibs ARE explicitly signed below, worked fine throughout) -- quarantine
+# not clearing on a nested file is a symptom of that file never having been
+# coherently signed with the rest of the bundle's own identity in the first
+# place, which blocks libvlc's own runtime dlopen() of it.
 for signee in \
     "$resources"/*.dylib \
     "$resources"/llplugin/*.dylib \
     "$resources/SLPlugin.app/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib \
     "$app_path/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib \
-    "$resources/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib
+    "$resources/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib \
+    "$resources/SLVlcProducer"/libvlc*.dylib* \
+    "$resources/SLVlcProducer/plugins"/*.dylib
 do
     # shellcheck disable=SC2154
     signloop --force --timestamp --keychain viewer.keychain \
