@@ -126,7 +126,7 @@ runs:
     # Portable.zip.
     - name: Setup Velopack CLI
       if: ${{ inputs.velopack_pack_id }}
-      uses: secondlife/viewer-build-util/setup-velopack@geenz/velopack
+      uses: secondlife/viewer-build-util/setup-velopack@4cae28bbb1a01092e2c783b90905b19f808f1b81
 
     - name: Build Velopack package
       if: ${{ inputs.velopack_pack_id }}
