@@ -33,7 +33,10 @@ runs:
 
     - name: Install Velopack CLI
       shell: bash
-      run: dotnet tool install -g vpk --prerelease
+      # Todo: This probably should use version from the specific viewer
+      # build, or from viewer's velopack package
+      # Having to update two separate versions is inconvenient.
+      run: dotnet tool install -g vpk --version 1.2.161
 
     - name: Replace bundled Setup.exe with patched version
       if: ${{ runner.os == 'Windows' && inputs.setup_exe_source != 'none' }}
