@@ -129,7 +129,7 @@ runs:
 
     - name: Setup Velopack CLI
       if: ${{ inputs.installer_type == 'velopack' }}
-      uses: secondlife/viewer-build-util/setup-velopack@geenz/velopack
+      uses: secondlife/viewer-build-util/setup-velopack@4cae28bbb1a01092e2c783b90905b19f808f1b81
       with:
         setup_exe_source: ${{ inputs.setup_exe_source }}
 
