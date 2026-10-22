@@ -218,6 +218,37 @@ runs:
           echo "::warning::UpdateMac binary not found in extracted bundle"
         fi
 
+        # Unlike Windows, vpk's macOS Portable.zip contains only the .app
+        # bundle itself -- there's no wrapping "install root" directory
+        # carrying a ".portable" marker the way Velopack's Windows portable
+        # format does (<root>/current/<exe> + <root>/.portable). LLDir_Mac's
+        # isPortableInstall() expects that marker one level above the .app
+        # bundle (i.e. a sibling of the bundle inside the zip), so add it
+        # directly to Releases/*-Portable.zip here.
+        #
+        # This only touches the Portable.zip artifact used for genuine
+        # portable distribution -- the ".app" bundle staged above (used to
+        # build the DMG) is left untouched, since the DMG install path must
+        # NOT carry a ".portable" marker.
+        # App uses marker for an existence-only check, comment inside is
+        # for users only, as it is expected that a portable build will be
+        # unpacked and moved.
+        marker_dir="$(mktemp -d)"
+        marker="$marker_dir/.portable"
+        cat > "$marker" <<'EOF'
+        This file signals the Second Life Viewer to store settings, logs,
+        and cache in a "UserData" folder next to the application instead
+        of the usual per-user system location.
+
+        Do not delete this file if you want to keep using this copy of the
+        viewer as a portable installation. Removing it will cause the
+        viewer to fall back to the standard per-user storage location.
+        EOF
+        # Stabilize the marker's timestamp.
+        touch -t 198001010000 "$marker"
+        zip -j "$portable_zip" "$marker"
+        rm -rf "$marker_dir"
+
     - name: Staple and validate the Velopack-ready bundle
       if: ${{ inputs.velopack_pack_id }}
       shell: bash
