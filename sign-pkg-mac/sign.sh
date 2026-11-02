@@ -86,30 +86,88 @@ function signloop() {
 
 resources="$app_path/Contents/Resources"
 # plain signing
+#
+# The "Chromium Embedded Framework" binary itself (as opposed to its sibling
+# Libraries/*.dylib files) isn't reliably discovered by `codesign --deep`
+# below, regardless of which bundle is doing the deep-signing - a known CEF-
+# on-macOS packaging quirk (CEF's own sample build scripts sign this binary
+# explicitly rather than relying on --deep). SLPlugin.app's own copy of this
+# framework doesn't need any of this treatment - a companion fix stopped
+# that phantom, always-broken bundle from being packaged in the first place
+# (ENABLE_MEDIA_PLUGINS is off by default; embedded-browser media replaced
+# it).
+#
+# SLVlcProducer's own libvlc*.dylib*/plugins/*.dylib (~350 loose files, not
+# a .framework the way CEF's Libraries/*.dylib above already are) were NEVER
+# covered by any explicit signee pattern here, unlike CEF's own dylibs -- the
+# same "`--deep` doesn't reliably reach deeply nested loose files" quirk
+# documented above, just never hit until SLVlcProducer's RTSP/parcel-audio
+# media was actually tested on a real packaged macOS build for the first
+# time. Confirmed as the real cause of a reported "libvlc produces zero
+# output, no network connection ever attempted" bug: `xattr -l` on a shipped
+# plugin dylib still showed a live com.apple.quarantine attribute even
+# though the app itself had already been launched/trusted (CEF, whose own
+# dylibs ARE explicitly signed below, worked fine throughout) -- quarantine
+# not clearing on a nested file is a symptom of that file never having been
+# coherently signed with the rest of the bundle's own identity in the first
+# place, which blocks libvlc's own runtime dlopen() of it.
 for signee in \
     "$resources"/*.dylib \
     "$resources"/llplugin/*.dylib \
     "$resources/SLPlugin.app/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib \
-    "$app_path/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib
+    "$app_path/Contents/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib \
+    "$resources/Frameworks/Chromium Embedded Framework.framework/Libraries"/*.dylib \
+    "$resources/SLVlcProducer"/libvlc*.dylib* \
+    "$resources/SLVlcProducer/plugins"/*.dylib
 do
     # shellcheck disable=SC2154
     signloop --force --timestamp --keychain viewer.keychain \
              --sign "$cert_name" "$signee"
 done
 # deep signing
+#
+# The CEF framework's own main binary (as opposed to its Libraries/*.dylib
+# siblings, plain-signed above) needs the SAME hardened-runtime + entitlements
+# treatment as the producer executables and the app itself, not bare signing -
+# it's a JIT-heavy V8/Chromium binary in its own right. Signing it without
+# --options runtime/--entitlements (as an earlier version of this fix did)
+# produced a binary with flags=0x0(none) and zero entitlements sitting
+# inside an otherwise fully hardened-runtime app; the mismatch crashed
+# SLMediaProducer (now split into SLCefProducer + SLVlcProducer) with
+# SIGTRAP/EXC_BREAKPOINT deep inside the framework on a background thread
+# within ~130ms of launch, but only in this notarized, hardened-runtime
+# build - never in a local or ad-hoc-signed one, where nothing is
+# hardened-runtime-restricted in the first place. Listed here (main app
+# bundle's own copy, and each producer's standalone copy under
+# Resources/Frameworks) rather than in the plain-signing loop above, even
+# though `--deep` is a no-op on a bare executable, purely to keep it
+# visually grouped with its matching flags.
 for signee in \
     "$resources/updater/SLVersionChecker" \
     "$resources/SLPlugin.app/Contents/MacOS/SLPlugin" \
     "$resources/SLVoice" \
+    "$resources/SLCefProducer/SLCefProducer" \
+    "$resources/SLVlcProducer/SLVlcProducer" \
+    "$app_path/Contents/Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework" \
+    "$resources/Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework" \
     "$app_path"
 do
+    # ENTITLEMENTS_FILE lets a caller substitute a debug variant (e.g. one
+    # with com.apple.security.get-task-allow added, to allow local debugger
+    # attachment) without touching the real production entitlements file.
+    # Unset/empty falls back to the normal one, as always.
     signloop --verbose --deep --force \
-             --entitlements "$mydir/installer/slplugin.entitlements" \
+             --entitlements "${ENTITLEMENTS_FILE:-$mydir/installer/slplugin.entitlements}" \
              --options runtime --keychain viewer.keychain \
              --sign "$cert_name" "$signee"
 done
 
-spctl -a -texec -vvvv "$app_path"
+spctl -a -texec -vvvv "$app_path" || true
+
+if [[ "${SKIP_NOTARIZE:-}" == "true" ]]; then
+    echo "SKIP_NOTARIZE is set, skipping notarization and stapling"
+    exit 0
+fi
 
 # ****************************************************************************
 #   notarize the app

@@ -40,6 +40,32 @@ inputs:
     type: string
     required: false
     default: "Second Life"
+  velopack_pack_id:
+    description: "Velopack pack ID (from build step)"
+    required: false
+  velopack_pack_version:
+    description: "Velopack pack version (from build step)"
+    required: false
+  velopack_pack_title:
+    description: "Velopack pack title (from build step)"
+    required: false
+  velopack_main_exe:
+    description: "Velopack main executable name (from build step)"
+    required: false
+  velopack_bundle_id:
+    description: "Velopack bundle ID (from build step)"
+    required: false
+  debug_entitlements:
+    description: >
+      Diagnostic only: sign with slplugin-debug.entitlements (adds
+      com.apple.security.get-task-allow) instead of the real production
+      entitlements, to allow local debugger attachment. This makes the
+      build unnotarizable -- Apple rejects get-task-allow -- so only use
+      alongside an empty velopack_pack_id (which already skips
+      notarization). Never for distribution.
+    type: boolean
+    required: false
+    default: false
 
 runs:
   using: composite
@@ -57,6 +83,184 @@ runs:
         set -x
         mkdir -p ".app"
         tar xJf .tarball/* -C ".app"
+
+    # Sign the app bundle BEFORE Velopack packaging so that the nupkg
+    # contains signed binaries. This ensures that Velopack updates install
+    # a properly signed bundle, preserving macOS TCC permissions (e.g.,
+    # microphone access for SLVoice). Notarization is deferred until after
+    # vpk adds UpdateMac, since re-signing the bundle invalidates the
+    # notarization ticket.
+    - name: Sign the app (defer notarization)
+      shell: bash
+      env:
+        cert_base64: "${{ inputs.cert_base64 }}"
+        cert_name: "${{ inputs.cert_name }}"
+        cert_pass: "${{ inputs.cert_pass }}"
+        note_user: "${{ inputs.note_user }}"
+        note_pass: "${{ inputs.note_pass }}"
+        note_team: "${{ inputs.note_team }}"
+        SKIP_NOTARIZE: "true"
+        ENTITLEMENTS_FILE: "${{ inputs.debug_entitlements == 'true' && format('{0}/installer/slplugin-debug.entitlements', github.action_path) || '' }}"
+      run: |
+        app_bundle="$(ls -dt .app/*.app | head -n 1)"
+        "${{ github.action_path }}/sign.sh" "$app_bundle"
+
+    - name: Store notarytool credentials
+      if: ${{ inputs.velopack_pack_id }}
+      shell: bash
+      env:
+        note_user: "${{ inputs.note_user }}"
+        note_pass: "${{ inputs.note_pass }}"
+        note_team: "${{ inputs.note_team }}"
+      run: |
+        set -x -e
+        xcrun notarytool store-credentials "velopack-notary" \
+          --apple-id "$note_user" \
+          --password "$note_pass" \
+          --team-id "$note_team" \
+          --keychain "$HOME/Library/Keychains/viewer.keychain-db"
+
+    # Velopack packaging — runs AFTER signing. vpk injects UpdateMac and
+    # sq.version, signs its own additions, notarizes the entire bundle
+    # (including our pre-signed binaries), and produces the nupkg and
+    # Portable.zip.
+    - name: Setup Velopack CLI
+      if: ${{ inputs.velopack_pack_id }}
+      uses: secondlife/viewer-build-util/setup-velopack@4cae28bbb1a01092e2c783b90905b19f808f1b81
+
+    - name: Build Velopack package
+      if: ${{ inputs.velopack_pack_id }}
+      shell: bash
+      env:
+        PACK_ID: ${{ inputs.velopack_pack_id }}
+        PACK_VERSION: ${{ inputs.velopack_pack_version }}
+        PACK_TITLE: ${{ inputs.velopack_pack_title }}
+        MAIN_EXE: ${{ inputs.velopack_main_exe }}
+        BUNDLE_ID: ${{ inputs.velopack_bundle_id }}
+        CERT_NAME: "${{ inputs.cert_name }}"
+      run: |
+        set -x
+        app_bundle="$(ls -dt .app/*.app | head -n 1)"
+
+        # Run vpk pack on the already-signed bundle.
+        # --signDisableDeep: don't re-sign our pre-signed binaries
+        # --signAppIdentity: sign only what vpk adds (UpdateMac, top-level bundle)
+        # --signEntitlements: use our entitlements for UpdateMac
+        # --notaryProfile: notarize the final bundle (covers all binaries)
+        set +e
+        vpk pack \
+          --packId "$PACK_ID" \
+          --packVersion "$PACK_VERSION" \
+          --packDir "$app_bundle" \
+          --packTitle "$PACK_TITLE" \
+          --mainExe "$MAIN_EXE" \
+          --bundleId "$BUNDLE_ID" \
+          --outputDir Releases \
+          --noInst \
+          --verbose \
+          --signAppIdentity "$CERT_NAME" \
+          --signEntitlements "${{ github.action_path }}/installer/slplugin.entitlements" \
+          --signDisableDeep \
+          --notaryProfile "velopack-notary" \
+          --keychain "$HOME/Library/Keychains/viewer.keychain-db" \
+          2>&1 | tee "$RUNNER_TEMP/vpk_pack.log"
+        rc="${PIPESTATUS[0]}"
+        set -e
+        exit "$rc"
+
+    # vpk's own printed notarization summary sometimes shows an empty
+    # "issues" list even when Apple actually found specific problems, so
+    # on failure, re-fetch the full log straight from notarytool using the
+    # job id vpk already printed, instead of guessing blind.
+    - name: Dump full notarization log on failure
+      if: ${{ failure() && inputs.velopack_pack_id }}
+      shell: bash
+      run: |
+        set +e
+        jobid="$(grep -oE '"(jobId|id)": *"[0-9a-f-]{36}"' "$RUNNER_TEMP/vpk_pack.log" \
+                 | grep -oE '[0-9a-f-]{36}' | tail -n 1)"
+        if [[ -z "$jobid" ]]; then
+          echo "::warning::Could not find a notarization job id in vpk pack output"
+          exit 0
+        fi
+        echo "Fetching full notarytool log for job $jobid"
+        xcrun notarytool log "$jobid" \
+          --keychain-profile velopack-notary \
+          --keychain "$HOME/Library/Keychains/viewer.keychain-db"
+
+    - name: Replace app bundle with Velopack-ready version
+      if: ${{ inputs.velopack_pack_id }}
+      shell: bash
+      run: |
+        set -x
+        # The Portable.zip contains the signed app bundle with UpdateMac
+        # and sq.version injected by vpk pack.
+        portable_zip="$(ls Releases/*-Portable.zip | head -n 1)"
+        if [[ -z "$portable_zip" ]]; then
+          echo "::error::No Portable.zip found in Releases/"
+          exit 1
+        fi
+
+        # Replace .app/ with the Velopack-ready bundle
+        rm -rf .app/*.app
+        ditto -xk "$portable_zip" .app/
+
+        new_app="$(ls -dt .app/*.app | head -n 1)"
+        if [[ -z "$new_app" ]]; then
+          echo "::error::No .app bundle found after extracting Portable.zip"
+          exit 1
+        fi
+
+        echo "Using Velopack-ready app bundle: $new_app"
+        if [[ -f "$new_app/Contents/MacOS/UpdateMac" ]]; then
+          echo "UpdateMac binary present"
+        else
+          echo "::warning::UpdateMac binary not found in extracted bundle"
+        fi
+
+        # Unlike Windows, vpk's macOS Portable.zip contains only the .app
+        # bundle itself -- there's no wrapping "install root" directory
+        # carrying a ".portable" marker the way Velopack's Windows portable
+        # format does (<root>/current/<exe> + <root>/.portable). LLDir_Mac's
+        # isPortableInstall() expects that marker one level above the .app
+        # bundle (i.e. a sibling of the bundle inside the zip), so add it
+        # directly to Releases/*-Portable.zip here.
+        #
+        # This only touches the Portable.zip artifact used for genuine
+        # portable distribution -- the ".app" bundle staged above (used to
+        # build the DMG) is left untouched, since the DMG install path must
+        # NOT carry a ".portable" marker.
+        # App uses marker for an existence-only check, comment inside is
+        # for users only, as it is expected that a portable build will be
+        # unpacked and moved.
+        marker_dir="$(mktemp -d)"
+        marker="$marker_dir/.portable"
+        cat > "$marker" <<'EOF'
+        This file signals the Second Life Viewer to store settings, logs,
+        and cache in a "UserData" folder next to the application instead
+        of the usual per-user system location.
+
+        Do not delete this file if you want to keep using this copy of the
+        viewer as a portable installation. Removing it will cause the
+        viewer to fall back to the standard per-user storage location.
+        EOF
+        # Stabilize the marker's timestamp.
+        touch -t 198001010000 "$marker"
+        zip -j "$portable_zip" "$marker"
+        rm -rf "$marker_dir"
+
+    - name: Staple and validate the Velopack-ready bundle
+      if: ${{ inputs.velopack_pack_id }}
+      shell: bash
+      run: |
+        set -x -e
+        app_bundle="$(ls -dt .app/*.app | head -n 1)"
+
+        # vpk already notarized the bundle. Staple the ticket and validate.
+        xcrun stapler staple "$app_bundle"
+        xcrun stapler validate "$app_bundle"
+        codesign -vvvv "$app_bundle"
+        spctl -a -texec -vvvv "$app_bundle"
 
     - name: Set up the app sparseimage
       shell: bash
@@ -119,21 +323,6 @@ runs:
         # Set the disk image root's custom icon bit
         SetFile -a C "$volpath"
 
-    - name: Sign and notarize the app
-      shell: bash
-      env:
-        cert_base64: "${{ inputs.cert_base64 }}"
-        cert_name: "${{ inputs.cert_name }}"
-        cert_pass: "${{ inputs.cert_pass }}"
-        note_user: "${{ inputs.note_user }}"
-        note_pass: "${{ inputs.note_pass }}"
-        note_team: "${{ inputs.note_team }}"
-      run: |
-        # Sign the app; do this in the copy that's in the .dmg so that the
-        # extended attributes used by the signature are preserved; moving the
-        # files would leave them behind and invalidate the signatures.
-        "${{ github.action_path }}/sign.sh" "${{ env.app_path }}"
-
     - name: Unmount the sparseimage
       # unmount even if the above fails
       if: ${{ ! cancelled() }}
@@ -177,3 +366,9 @@ runs:
         name: "macOS-installer"
         path: ${{ env.installer }}
 
+    - name: Upload Velopack releases
+      if: ${{ inputs.velopack_pack_id }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: "macOS-releases"
+        path: Releases/
